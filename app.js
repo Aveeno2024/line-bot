@@ -7,7 +7,7 @@ app.use(express.json());
 // ⚠️ 請在這裡填入你的金鑰 ⚠️
 // ==========================================
 const CWA_AUTH_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
-const LINE_ACCESS_TOKEN = 'jE32H0g82+LozYneAfQMuNFOpWxKsMdb8W/eVPPrNa29P5HWIU2VxTHz24qCg63k+Tmh4YXths2ZVwa1CWPAhhbUmEOEGuiYxXB6x9wZcU4RBF+di/e/wkhMFb+t+4lrW5Qco3r6yxWSmqqar/Oc3QdB04t89/1O/w1cDnyilFU=';
+const LINE_ACCESS_TOKEN = 'yn5Na00wbNupb51o4eVC+GSvXbjqO2oaZURDj3IVHbcVwndFdmXK33Upu1y68YXrkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9wedwylmDkXq2E1X+CuQhpjl/bQDNmT08b0XChzXshqRAdB04t89/1O/w1cDnyilFU=';
 // ==========================================
 
 // 城市列表（共18個）
