@@ -123,6 +123,7 @@ async function getRealWeather(cityName) {
     });
     
     const data = response.data;
+    console.log('API 完整回传:', JSON.stringify(data));
     
     // 解析气温和湿度
     // 中央气象署回传格式参考
