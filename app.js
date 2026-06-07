@@ -4,15 +4,15 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
-// ⚠️ 請填入你的金鑰 ⚠️
+// ⚠️ 请填入你的密钥 ⚠️
 // ==========================================
 const CHANNEL_ACCESS_TOKEN = 'yn5Na00wbNupb51o4eVC+GSvXbjqO2oaZURDj3IVHbcVwndFdmXK33Upu1y68YXrkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9wedwylmDkXq2E1X+CuQhpjl/bQDNmT08b0XChzXshqRAdB04t89/1O/w1cDnyilFU=';
 const CWA_AUTH_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
-// 城市列表（1碼）
+// 城市列表（1码）
 const CITIES = [
-  { code: "1", name: "臺北市", displayName: "臺北市" },
+  { code: "1", name: "臺北市", displayName: "台北市" },
   { code: "2", name: "新北市", displayName: "新北市" },
   { code: "3", name: "基隆市", displayName: "基隆市" },
   { code: "4", name: "宜蘭縣", displayName: "宜蘭縣" },
@@ -32,7 +32,7 @@ const CITIES = [
   { code: "I", name: "澎湖縣", displayName: "澎湖縣" }
 ];
 
-// 類比資料（當 API 失敗時使用）
+// 模拟数据（备用）
 const MOCK_WEATHER = {
   "臺北市": { temp: 32, humidity: 58 },
   "新北市": { temp: 31, humidity: 60 },
@@ -58,101 +58,73 @@ const INDOOR_TEMP = 25.0;
 const INDOOR_HUM = 50.0;
 
 // ==========================================
-// 使用觀測資料 API 獲取天氣
+// 测试所有 API 资料集
 // ==========================================
-async function getRealWeather(cityName) {
-  // 使用觀測資料 API (O-A0001-001)
-  const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${CWA_AUTH_KEY}&format=JSON&locationName=${encodeURIComponent(cityName)}`;
+async function getWeatherByDataid(cityName, dataid) {
+  const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${dataid}?Authorization=${CWA_AUTH_KEY}&format=JSON`;
   
   try {
-    console.log(`🌤️ 正在獲取 ${cityName} 真實天氣...`);
-    
-    const response = await axios.get(url, {
-      timeout: 8000,
-      headers: { 'User-Agent': 'LINE-Bot/1.0' }
-    });
-    
+    const response = await axios.get(url, { timeout: 5000 });
     const data = response.data;
     
-    if (data.success !== "true") {
-      console.log('❌ API 回傳失敗');
-      return null;
-    }
+    if (data.success !== "true") return null;
     
-    const locations = data.records?.location;
-    if (!locations || locations.length === 0) {
-      console.log('❌ 找不到 location 資料');
-      return null;
-    }
+    const locations = data.records?.Locations;
+    if (!locations) return null;
     
     // 找到匹配的城市
-    let targetLocation = null;
+    let target = null;
     for (let loc of locations) {
-      const locName = loc.locationName;
-      // 寬鬆匹配
-      if (locName === cityName || 
-          locName.includes(cityName) || 
-          cityName.includes(locName)) {
-        targetLocation = loc;
-        console.log(`✅ 匹配成功: ${locName}`);
+      if (loc.LocationsName === cityName) {
+        target = loc;
         break;
       }
     }
     
-    if (!targetLocation) {
-      console.log(`❌ 找不到 ${cityName} 的資料`);
-      return null;
-    }
+    if (!target) return null;
     
-    const weatherElements = targetLocation.weatherElement;
+    const firstLocation = target.Location?.[0];
+    if (!firstLocation) return null;
     
-    // 找溫度
-    const tempData = weatherElements.find(w => 
-      w.elementName === "溫度" || 
-      w.elementName === "AirTemperature" ||
-      w.elementName === "溫度"
-    );
+    const weatherElements = firstLocation.WeatherElement;
+    const tempData = weatherElements.find(w => w.ElementName === "溫度");
+    const humData = weatherElements.find(w => w.ElementName === "相對濕度");
     
-    // 找濕度
-    const humData = weatherElements.find(w => 
-      w.elementName === "相對濕度" || 
-      w.elementName === "RelativeHumidity" ||
-      w.elementName === "相對濕度"
-    );
+    if (!tempData || !humData) return null;
     
-    if (!tempData || !humData) {
-      console.log('❌ 找不到溫度或濕度資料');
-      return null;
-    }
-    
-    // 取最新時間點的值
-    let temp = null;
-    let humidity = null;
-    
-    if (tempData.time && tempData.time.length > 0) {
-      const tempValue = tempData.time[0].elementValue;
-      temp = tempValue?.value || tempValue?.Temperature;
-    }
-    
-    if (humData.time && humData.time.length > 0) {
-      const humValue = humData.time[0].elementValue;
-      humidity = humValue?.value || humValue?.RelativeHumidity;
-    }
+    const temp = tempData.Time?.[0]?.ElementValue?.[0]?.Temperature;
+    const humidity = humData.Time?.[0]?.ElementValue?.[0]?.RelativeHumidity;
     
     if (temp && humidity) {
-      console.log(`✅ ${cityName} 真實天氣: ${temp}℃, ${humidity}%`);
       return { temp: parseFloat(temp), humidity: parseFloat(humidity) };
     }
     
-    console.log(`❌ 溫度或濕度值為空: temp=${temp}, humidity=${humidity}`);
     return null;
   } catch (e) {
-    console.error(`❌ 獲取 ${cityName} 天氣失敗:`, e.message);
+    console.error(`获取 ${cityName} 天气失败:`, e.message);
     return null;
   }
 }
 
-// 取得天氣（真實 API + 模擬備援）
+// 获取真实天气
+async function getRealWeather(cityName) {
+  // 台北市用 dataid 直接查
+  if (cityName === "臺北市") {
+    return await getWeatherByDataid(cityName, "F-D0047-061");
+  }
+  if (cityName === "高雄市") {
+    return await getWeatherByDataid(cityName, "F-D0047-067");
+  }
+  if (cityName === "宜蘭縣") {
+    return await getWeatherByDataid(cityName, "F-D0047-003");
+  }
+  
+  // 其他县市暂时用模拟数据
+  console.log(`使用模拟数据: ${cityName}`);
+  return null;
+}
+
+// 取得天气（真实 API + 模拟备援）
 async function getWeather(cityName) {
   try {
     const realWeather = await getRealWeather(cityName);
@@ -160,69 +132,70 @@ async function getWeather(cityName) {
       return realWeather;
     }
   } catch (e) {
-    console.log(`真實 API 異常: ${e.message}`);
+    console.log(`真实 API 异常: ${e.message}`);
   }
   
-  console.log(`使用類比資料: ${cityName}`);
+  console.log(`使用模拟数据: ${cityName}`);
   return MOCK_WEATHER[cityName] || { temp: 28, humidity: 60 };
 }
 
-// 計算合併指數
+// 计算合并指数
 async function getCombinedIndex(city) {
   const weather = await getWeather(city.name);
-  const isRealData = weather !== MOCK_WEATHER[city.name];
+  const isRealData = (city.name === "臺北市" || city.name === "高雄市" || city.name === "宜蘭縣") && 
+                     weather !== MOCK_WEATHER[city.name];
   
   const deltaTemp = Math.max(0, weather.temp - INDOOR_TEMP);
   const drynessScore = (deltaTemp / 12) * 50 + Math.max(0, 55 - weather.humidity) * 1.5;
   
   let drynessLevel = "🟢 低";
-  let drynessAdvice = "✅ 狀況良好";
+  let drynessAdvice = "✅ 状况良好";
   if (drynessScore >= 75) {
-    drynessLevel = "🔴 危險";
-    drynessAdvice = "🔥 請立即加強保濕，避免長時間吹冷氣。";
+    drynessLevel = "🔴 危险";
+    drynessAdvice = "🔥 请立即加强保湿，避免长时间吹冷气。";
   } else if (drynessScore >= 50) {
     drynessLevel = "🟠 高";
-    drynessAdvice = "⚠️ 建議使用保濕乳液。";
+    drynessAdvice = "⚠️ 建议使用保湿乳液。";
   } else if (drynessScore >= 25) {
     drynessLevel = "🟡 中";
-    drynessAdvice = "😐 可適度補充水分。";
+    drynessAdvice = "😐 可适度补充水分。";
   }
   
   const shock = Math.abs(weather.humidity - INDOOR_HUM);
   let shockLevel = "🟢 低";
-  let shockAdvice = "✅ 進出舒適";
+  let shockAdvice = "✅ 进出舒适";
   if (shock >= 30) {
-    shockLevel = "🔴 危險";
-    shockAdvice = "🔥 濕度衝擊劇烈！進出冷氣房請注意身體調節。";
+    shockLevel = "🔴 危险";
+    shockAdvice = "🔥 湿度冲击剧烈！进出冷气房请注意身体调节。";
   } else if (shock >= 20) {
     shockLevel = "🟠 高";
-    shockAdvice = "⚠️ 濕度落差大，建議緩慢進出室內外。";
+    shockAdvice = "⚠️ 湿度落差大，建议缓慢进出室内外。";
   } else if (shock >= 10) {
     shockLevel = "🟡 中";
-    shockAdvice = "😐 有些微衝擊感，一般體質可適應。";
+    shockAdvice = "😐 有些微冲击感，一般体质可适应。";
   }
   
-  const dataSource = isRealData ? "中央氣象署觀測資料" : "類比資料";
+  const dataSource = isRealData ? "中央气象署真实资料" : "模拟数据";
   
-  return `🌤️ 【${city.displayName} 環境指數】
+  return `🌤️ 【${city.displayName} 环境指数】
 
-🌡️ 皮膚乾燥指數：${drynessLevel} (${Math.round(drynessScore)}分)
-   • 室外 ${weather.temp}℃ / 室內 ${INDOOR_TEMP}℃
-   • 室外濕度 ${weather.humidity}% / 室內 ${INDOOR_HUM}%
+🌡️ 皮肤干燥指数：${drynessLevel} (${Math.round(drynessScore)}分)
+   • 室外 ${weather.temp}℃ / 室内 ${INDOOR_TEMP}℃
+   • 室外湿度 ${weather.humidity}% / 室内 ${INDOOR_HUM}%
    💡 ${drynessAdvice}
 
-💧 濕度衝擊指數：${shockLevel} (衝擊差 ${Math.round(shock)}%)
-   • 室外濕度 ${weather.humidity}% → 室內 ${INDOOR_HUM}%
+💧 湿度冲击指数：${shockLevel} (冲击差 ${Math.round(shock)}%)
+   • 室外湿度 ${weather.humidity}% → 室内 ${INDOOR_HUM}%
    💡 ${shockAdvice}
 
-📊 資料來源：${dataSource}`;
+📊 资料来源：${dataSource}`;
 }
 
 // ==========================================
 // LINE Webhook 入口
 // ==========================================
 app.post('/webhook', async (req, res) => {
-  console.log('收到請求');
+  console.log('收到请求');
   
   try {
     const events = req.body.events;
@@ -258,16 +231,16 @@ app.post('/webhook', async (req, res) => {
     
     res.status(200).send('OK');
   } catch (err) {
-    console.error('Webhook 錯誤:', err);
+    console.error('Webhook 错误:', err);
     res.status(200).send('OK');
   }
 });
 
-// 發送左右滑動的城市選單
+// 发送左右滑动的城市选单
 async function sendCityMenu(replyToken) {
   const carousel = {
     type: 'flex',
-    altText: '請選擇城市查詢環境指數',
+    altText: '请选择城市查询环境指数',
     contents: {
       type: 'carousel',
       contents: CITIES.map(city => ({
@@ -278,9 +251,9 @@ async function sendCityMenu(replyToken) {
           spacing: 'md',
           contents: [
             { type: 'text', text: `🌡️💧 ${city.displayName}`, weight: 'bold', size: 'xl', align: 'center' },
-            { type: 'text', text: '皮膚乾燥指數 + 濕度衝擊指數', size: 'sm', color: '#666666', align: 'center', wrap: true },
+            { type: 'text', text: '皮肤干燥指数 + 湿度冲击指数', size: 'sm', color: '#666666', align: 'center', wrap: true },
             { type: 'separator', margin: 'md' },
-            { type: 'text', text: '📊 點下方按鈕查詢', size: 'sm', color: '#AAAAAA', align: 'center' }
+            { type: 'text', text: '📊 点下方按钮查询', size: 'sm', color: '#AAAAAA', align: 'center' }
           ]
         },
         footer: {
@@ -293,9 +266,9 @@ async function sendCityMenu(replyToken) {
             color: '#4A90E2',
             action: {
               type: 'postback',
-              label: '🔍 查詢',
+              label: '🔍 查询',
               data: `city=${city.code}`,
-              displayText: `查詢 ${city.displayName}`
+              displayText: `查询 ${city.displayName}`
             }
           }]
         }
@@ -306,7 +279,7 @@ async function sendCityMenu(replyToken) {
   await replyMessage(replyToken, [carousel]);
 }
 
-// 回復 LINE 消息
+// 回复 LINE 消息
 async function replyMessage(replyToken, messages) {
   if (!Array.isArray(messages)) {
     messages = [{ type: 'text', text: messages }];
@@ -322,20 +295,57 @@ async function replyMessage(replyToken, messages) {
         'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`
       }
     });
-    console.log('回復成功');
+    console.log('回复成功');
   } catch (err) {
-    console.error('回復失敗:', err.response?.data || err.message);
+    console.error('回复失败:', err.response?.data || err.message);
   }
 }
 
-// 健康檢查
+// ==========================================
+// 测试端点
+// ==========================================
+
+// 健康检查
 app.get('/', (req, res) => {
-  res.send('✅ LINE Bot 已上線！\n\n輸入代碼查詢環境指數：1=臺北市，2=新北市...');
+  res.send('✅ LINE Bot 已上线！\n\n输入代码查询环境指数：1=台北市，2=新北市...');
 });
 
-// 啟動伺服器
+// 测试可用的资料集
+app.get('/test-apis', async (req, res) => {
+  const apis = [
+    { name: "乡镇天气预报", url: `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-061?Authorization=${CWA_AUTH_KEY}&format=JSON` },
+    { name: "观测资料-乡镇", url: `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${CWA_AUTH_KEY}&format=JSON` },
+    { name: "观测资料-自动测站", url: `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${CWA_AUTH_KEY}&format=JSON` },
+    { name: "现在天气", url: `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_AUTH_KEY}&format=JSON` }
+  ];
+  
+  const results = [];
+  
+  for (let api of apis) {
+    try {
+      const response = await axios.get(api.url, { timeout: 5000 });
+      const data = response.data;
+      results.push({
+        name: api.name,
+        success: data.success,
+        hasRecords: !!data.records,
+        locationCount: data.records?.location?.length || data.records?.Locations?.length || 0
+      });
+    } catch (e) {
+      results.push({
+        name: api.name,
+        success: false,
+        error: e.message
+      });
+    }
+  }
+  
+  res.json(results);
+});
+
+// 启动服务器
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`觀測資料 API 已啟用`);
+  console.log(`真实 API 已启用（台北市、高雄市、宜蘭縣使用真实数据）`);
 });
