@@ -6,8 +6,8 @@ app.use(express.json());
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
-const CHANNEL_ACCESS_TOKEN = '你的LINE Channel Access Token';
-const CWA_AUTH_KEY = '你的中央氣象署授權碼';
+const CHANNEL_ACCESS_TOKEN = 'yn5Na00wbNupb51o4eVC+GSvXbjqO2oaZURDj3IVHbcVwndFdmXK33Upu1y68YXrkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9wedwylmDkXq2E1X+CuQhpjl/bQDNmT08b0XChzXshqRAdB04t89/1O/w1cDnyilFU=';
+const CWA_AUTH_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
 // 城市列表（1碼）
