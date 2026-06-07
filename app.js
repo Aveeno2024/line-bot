@@ -58,70 +58,108 @@ const INDOOR_TEMP = 25.0;
 const INDOOR_HUM = 50.0;
 
 // ==========================================
-// 测试所有 API 资料集
+// 使用「现在天气」API 获取天气
 // ==========================================
-async function getWeatherByDataid(cityName, dataid) {
-  const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/${dataid}?Authorization=${CWA_AUTH_KEY}&format=JSON`;
+async function getRealWeather(cityName) {
+  // 使用「现在天气」API (F-C0032-001)
+  const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_AUTH_KEY}&format=JSON`;
   
   try {
-    const response = await axios.get(url, { timeout: 5000 });
+    console.log(`🌤️ 正在获取 ${cityName} 真实天气...`);
+    
+    const response = await axios.get(url, {
+      timeout: 8000,
+      headers: { 'User-Agent': 'LINE-Bot/1.0' }
+    });
+    
     const data = response.data;
     
-    if (data.success !== "true") return null;
+    if (data.success !== "true") {
+      console.log('❌ API 回传失败');
+      return null;
+    }
     
-    const locations = data.records?.Locations;
-    if (!locations) return null;
+    const locations = data.records?.location;
+    if (!locations || locations.length === 0) {
+      console.log('❌ 找不到 location 资料');
+      return null;
+    }
+    
+    // 城市名称对照（API 用的名称）
+    const cityNameMap = {
+      "臺北市": "台北市",
+      "新北市": "新北市",
+      "基隆市": "基隆市",
+      "宜蘭縣": "宜蘭縣",
+      "花蓮縣": "花蓮縣",
+      "臺東縣": "台東縣",
+      "屏東縣": "屏東縣",
+      "高雄市": "高雄市",
+      "臺南市": "台南市",
+      "雲林縣": "雲林縣",
+      "嘉義縣": "嘉義縣",
+      "彰化縣": "彰化縣",
+      "臺中市": "台中市",
+      "南投縣": "南投縣",
+      "苗栗縣": "苗栗縣",
+      "桃園市": "桃園市",
+      "金門縣": "金門縣",
+      "澎湖縣": "澎湖縣"
+    };
+    
+    const searchName = cityNameMap[cityName] || cityName;
     
     // 找到匹配的城市
-    let target = null;
+    let targetLocation = null;
     for (let loc of locations) {
-      if (loc.LocationsName === cityName) {
-        target = loc;
+      const locName = loc.locationName;
+      if (locName === searchName || locName.includes(searchName) || searchName.includes(locName)) {
+        targetLocation = loc;
+        console.log(`✅ 匹配成功: ${locName}`);
         break;
       }
     }
     
-    if (!target) return null;
+    if (!targetLocation) {
+      console.log(`❌ 找不到 ${cityName} 的资料`);
+      return null;
+    }
     
-    const firstLocation = target.Location?.[0];
-    if (!firstLocation) return null;
+    const weatherElements = targetLocation.weatherElement;
     
-    const weatherElements = firstLocation.WeatherElement;
-    const tempData = weatherElements.find(w => w.ElementName === "溫度");
-    const humData = weatherElements.find(w => w.ElementName === "相對濕度");
+    // 找温度
+    const tempData = weatherElements.find(w => w.elementName === "溫度");
+    // 找湿度
+    const humData = weatherElements.find(w => w.elementName === "相對濕度");
     
-    if (!tempData || !humData) return null;
+    if (!tempData || !humData) {
+      console.log('❌ 找不到温度或湿度资料');
+      return null;
+    }
     
-    const temp = tempData.Time?.[0]?.ElementValue?.[0]?.Temperature;
-    const humidity = humData.Time?.[0]?.ElementValue?.[0]?.RelativeHumidity;
+    // 取值
+    let temp = null;
+    let humidity = null;
+    
+    if (tempData.time && tempData.time.length > 0) {
+      temp = tempData.time[0].elementValue?.value;
+    }
+    
+    if (humData.time && humData.time.length > 0) {
+      humidity = humData.time[0].elementValue?.value;
+    }
     
     if (temp && humidity) {
+      console.log(`✅ ${cityName} 真实天气: ${temp}℃, ${humidity}%`);
       return { temp: parseFloat(temp), humidity: parseFloat(humidity) };
     }
     
+    console.log(`❌ 温度或湿度值为空`);
     return null;
   } catch (e) {
-    console.error(`获取 ${cityName} 天气失败:`, e.message);
+    console.error(`❌ 获取 ${cityName} 天气失败:`, e.message);
     return null;
   }
-}
-
-// 获取真实天气
-async function getRealWeather(cityName) {
-  // 台北市用 dataid 直接查
-  if (cityName === "臺北市") {
-    return await getWeatherByDataid(cityName, "F-D0047-061");
-  }
-  if (cityName === "高雄市") {
-    return await getWeatherByDataid(cityName, "F-D0047-067");
-  }
-  if (cityName === "宜蘭縣") {
-    return await getWeatherByDataid(cityName, "F-D0047-003");
-  }
-  
-  // 其他县市暂时用模拟数据
-  console.log(`使用模拟数据: ${cityName}`);
-  return null;
 }
 
 // 取得天气（真实 API + 模拟备援）
@@ -142,8 +180,7 @@ async function getWeather(cityName) {
 // 计算合并指数
 async function getCombinedIndex(city) {
   const weather = await getWeather(city.name);
-  const isRealData = (city.name === "臺北市" || city.name === "高雄市" || city.name === "宜蘭縣") && 
-                     weather !== MOCK_WEATHER[city.name];
+  const isRealData = weather !== MOCK_WEATHER[city.name];
   
   const deltaTemp = Math.max(0, weather.temp - INDOOR_TEMP);
   const drynessScore = (deltaTemp / 12) * 50 + Math.max(0, 55 - weather.humidity) * 1.5;
@@ -175,7 +212,7 @@ async function getCombinedIndex(city) {
     shockAdvice = "😐 有些微冲击感，一般体质可适应。";
   }
   
-  const dataSource = isRealData ? "中央气象署真实资料" : "模拟数据";
+  const dataSource = isRealData ? "中央气象署即时资料" : "模拟数据";
   
   return `🌤️ 【${city.displayName} 环境指数】
 
@@ -310,42 +347,9 @@ app.get('/', (req, res) => {
   res.send('✅ LINE Bot 已上线！\n\n输入代码查询环境指数：1=台北市，2=新北市...');
 });
 
-// 测试可用的资料集
-app.get('/test-apis', async (req, res) => {
-  const apis = [
-    { name: "乡镇天气预报", url: `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-061?Authorization=${CWA_AUTH_KEY}&format=JSON` },
-    { name: "观测资料-乡镇", url: `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${CWA_AUTH_KEY}&format=JSON` },
-    { name: "观测资料-自动测站", url: `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0003-001?Authorization=${CWA_AUTH_KEY}&format=JSON` },
-    { name: "现在天气", url: `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-C0032-001?Authorization=${CWA_AUTH_KEY}&format=JSON` }
-  ];
-  
-  const results = [];
-  
-  for (let api of apis) {
-    try {
-      const response = await axios.get(api.url, { timeout: 5000 });
-      const data = response.data;
-      results.push({
-        name: api.name,
-        success: data.success,
-        hasRecords: !!data.records,
-        locationCount: data.records?.location?.length || data.records?.Locations?.length || 0
-      });
-    } catch (e) {
-      results.push({
-        name: api.name,
-        success: false,
-        error: e.message
-      });
-    }
-  }
-  
-  res.json(results);
-});
-
 // 启动服务器
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`真实 API 已启用（台北市、高雄市、宜蘭縣使用真实数据）`);
+  console.log(`「现在天气」API 已启用`);
 });
