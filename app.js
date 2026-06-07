@@ -10,7 +10,7 @@ const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf
 const CWA_AUTH_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
-// 城市列表（使用觀測站 ID）
+// 城市列表
 const CITIES = [
   { code: "1", name: "臺北市", displayName: "臺北市", stationId: "46692" },
   { code: "2", name: "新北市", displayName: "新北市", stationId: "46688" },
@@ -32,7 +32,7 @@ const CITIES = [
   { code: "I", name: "澎湖縣", displayName: "澎湖縣", stationId: "46735" }
 ];
 
-// 類比資料（備用）
+// 類比資料
 const MOCK_WEATHER = {
   "臺北市": { temp: 32, humidity: 58 },
   "新北市": { temp: 31, humidity: 60 },
@@ -54,75 +54,48 @@ const MOCK_WEATHER = {
   "澎湖縣": { temp: 30, humidity: 70 }
 };
 
-const INDOOR_TEMP = 25.0;
-const INDOOR_HUM = 50.0;
+const INDOOR_TEMP = 25;
+const INDOOR_HUM = 50;
 
-// ==========================================
-// 從中央氣象署獲取真實天氣
-// ==========================================
+// 獲取天氣
 async function getRealWeather(city) {
-  const { stationId, displayName } = city;
-  
-  // 使用即時觀測資料 API
-  const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${CWA_AUTH_KEY}&format=JSON&StationId=${stationId}`;
+  // 注意：是 O-A0001-001（字母O，不是數字0）
+  const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/O-A0001-001?Authorization=${CWA_AUTH_KEY}&format=JSON&StationId=${city.stationId}`;
   
   try {
-    console.log(`🌤️ 獲取 ${displayName} 天氣...`);
-    
-    const response = await axios.get(url, {
-      timeout: 10000,
-      headers: { 'User-Agent': 'LINE-Bot/1.0' }
-    });
-    
+    console.log(`獲取 ${city.displayName} 天氣...`);
+    const response = await axios.get(url, { timeout: 10000 });
     const data = response.data;
     
-    // 檢查 API 回應
-    if (!data || data.success !== "true") {
-      console.log(`❌ API 失敗: ${displayName}`);
-      return null;
+    if (data.success === "true" && data.records?.Station?.[0]?.WeatherElement) {
+      const weather = data.records.Station[0].WeatherElement;
+      const temp = parseFloat(weather.AirTemperature);
+      const humidity = parseFloat(weather.RelativeHumidity);
+      
+      if (!isNaN(temp) && !isNaN(humidity)) {
+        console.log(`✅ ${city.displayName}: ${temp}℃, ${humidity}%`);
+        return { temp, humidity };
+      }
     }
-    
-    // 解析資料 - 注意 O-A0001-001 的資料結構
-    const station = data.records?.Station?.[0];
-    if (!station || !station.WeatherElement) {
-      console.log(`❌ 無觀測資料: ${displayName}`);
-      return null;
-    }
-    
-    const temp = station.WeatherElement.AirTemperature;
-    const humidity = station.WeatherElement.RelativeHumidity;
-    
-    if (temp && humidity) {
-      const tempNum = parseFloat(temp);
-      const humNum = parseFloat(humidity);
-      console.log(`✅ ${displayName}: ${tempNum}℃, ${humNum}%`);
-      return { temp: tempNum, humidity: humNum };
-    }
-    
-    console.log(`⚠️ 資料不完整: ${displayName}`);
     return null;
-    
   } catch (error) {
-    console.error(`❌ ${displayName} API 錯誤:`, error.message);
+    console.error(`❌ ${city.displayName} API錯誤:`, error.message);
     return null;
   }
 }
 
-// 取得天氣（真實 API + 備援）
 async function getWeather(city) {
-  const realWeather = await getRealWeather(city);
-  if (realWeather && realWeather.temp && realWeather.humidity) {
-    return realWeather;
-  }
+  const real = await getRealWeather(city);
+  if (real) return real;
   
-  console.log(`📦 使用類比資料: ${city.displayName}`);
+  console.log(`使用類比資料: ${city.displayName}`);
   return MOCK_WEATHER[city.name] || { temp: 28, humidity: 60 };
 }
 
 // 計算指數
 async function getCombinedIndex(city) {
   const weather = await getWeather(city);
-  const isRealData = MOCK_WEATHER[city.name] ? weather !== MOCK_WEATHER[city.name] : false;
+  const isReal = MOCK_WEATHER[city.name] ? weather !== MOCK_WEATHER[city.name] : false;
   
   const deltaTemp = Math.max(0, weather.temp - INDOOR_TEMP);
   const drynessScore = Math.min(100, (deltaTemp / 12) * 50 + Math.max(0, 55 - weather.humidity) * 1.5);
@@ -131,13 +104,13 @@ async function getCombinedIndex(city) {
   let drynessAdvice = "✅ 狀況良好";
   if (drynessScore >= 75) {
     drynessLevel = "🔴 危險";
-    drynessAdvice = "🔥 請立即加強保濕，避免長時間吹冷氣。";
+    drynessAdvice = "🔥 請立即加強保濕";
   } else if (drynessScore >= 50) {
     drynessLevel = "🟠 高";
-    drynessAdvice = "⚠️ 建議使用保濕乳液。";
+    drynessAdvice = "⚠️ 建議使用保濕乳液";
   } else if (drynessScore >= 25) {
     drynessLevel = "🟡 中";
-    drynessAdvice = "😐 可適度補充水分。";
+    drynessAdvice = "😐 可適度補充水分";
   }
   
   const shock = Math.abs(weather.humidity - INDOOR_HUM);
@@ -145,16 +118,16 @@ async function getCombinedIndex(city) {
   let shockAdvice = "✅ 進出舒適";
   if (shock >= 30) {
     shockLevel = "🔴 危險";
-    shockAdvice = "🔥 濕度衝擊劇烈！進出冷氣房請注意身體調節。";
+    shockAdvice = "🔥 濕度衝擊劇烈";
   } else if (shock >= 20) {
     shockLevel = "🟠 高";
-    shockAdvice = "⚠️ 濕度落差大，建議緩慢進出室內外。";
+    shockAdvice = "⚠️ 濕度落差大";
   } else if (shock >= 10) {
     shockLevel = "🟡 中";
-    shockAdvice = "😐 有些微衝擊感，一般體質可適應。";
+    shockAdvice = "😐 有些微衝擊感";
   }
   
-  const dataSource = isRealData ? "🌐 中央氣象署即時觀測" : "📋 類比資料";
+  const source = isReal ? "🌐 中央氣象署" : "📋 類比資料";
   
   return `🌤️ 【${city.displayName} 環境指數】
 
@@ -164,119 +137,66 @@ async function getCombinedIndex(city) {
    💡 ${drynessAdvice}
 
 💧 濕度衝擊指數：${shockLevel} (衝擊差 ${Math.round(shock)}%)
-   • 室外濕度 ${weather.humidity}% → 室內 ${INDOOR_HUM}%
    💡 ${shockAdvice}
 
-📊 資料來源：${dataSource}`;
+📊 ${source}`;
 }
 
-// ==========================================
 // LINE Webhook
-// ==========================================
 app.post('/webhook', async (req, res) => {
-  console.log('📨 收到 Webhook');
+  console.log('收到 Webhook');
+  res.status(200).send('OK'); // 立即回應
   
   try {
     const events = req.body.events;
-    if (!events || events.length === 0) {
-      return res.status(200).send('OK');
-    }
+    if (!events) return;
     
-    for (let event of events) {
-      const replyToken = event.replyToken;
-      
+    for (const event of events) {
       if (event.type === 'message' && event.message.type === 'text') {
-        const userInput = event.message.text.trim().toUpperCase();
-        const city = CITIES.find(c => c.code === userInput);
+        const city = CITIES.find(c => c.code === event.message.text.trim().toUpperCase());
         
         if (city) {
-          const replyText = await getCombinedIndex(city);
-          await replyMessage(replyToken, replyText);
+          const reply = await getCombinedIndex(city);
+          await replyMessage(event.replyToken, reply);
         } else {
-          await sendCityMenu(replyToken);
+          await sendHelpMessage(event.replyToken);
         }
       }
       
-      if (event.type === 'postback') {
-        const data = event.postback.data;
-        if (data && data.startsWith('city=')) {
-          const cityCode = data.split('=')[1];
-          const city = CITIES.find(c => c.code === cityCode);
-          if (city) {
-            const replyText = await getCombinedIndex(city);
-            await replyMessage(replyToken, replyText);
-          }
+      if (event.type === 'postback' && event.postback.data?.startsWith('city=')) {
+        const code = event.postback.data.split('=')[1];
+        const city = CITIES.find(c => c.code === code);
+        if (city) {
+          const reply = await getCombinedIndex(city);
+          await replyMessage(event.replyToken, reply);
         }
       }
     }
-    
-    res.status(200).send('OK');
   } catch (err) {
-    console.error('Webhook 錯誤:', err);
-    res.status(200).send('OK');
+    console.error('處理錯誤:', err);
   }
 });
 
-// 城市選單
-async function sendCityMenu(replyToken) {
-  // 限制一次最多顯示 10 個，避免超過 LINE 限制
-  const displayCities = CITIES.slice(0, 10);
+async function sendHelpMessage(replyToken) {
+  const helpText = `📱 請輸入城市代碼查詢：
+
+1=臺北市    2=新北市    3=基隆市
+4=宜蘭縣    5=花蓮縣    6=臺東縣
+7=屏東縣    8=高雄市    9=臺南市
+A=雲林縣    B=嘉義縣    C=彰化縣
+D=臺中市    E=南投縣    F=苗栗縣
+G=桃園市    H=金門縣    I=澎湖縣
+
+或直接點選下方選單 👇`;
   
-  const carousel = {
-    type: 'flex',
-    altText: '請選擇城市',
-    contents: {
-      type: 'carousel',
-      contents: displayCities.map(city => ({
-        type: 'bubble',
-        body: {
-          type: 'box',
-          layout: 'vertical',
-          spacing: 'md',
-          contents: [
-            { type: 'text', text: `🌡️💧 ${city.displayName}`, weight: 'bold', size: 'xl', align: 'center' },
-            { type: 'separator', margin: 'md' },
-            { type: 'text', text: '點下方按鈕查詢', size: 'sm', color: '#666666', align: 'center' }
-          ]
-        },
-        footer: {
-          type: 'box',
-          layout: 'vertical',
-          spacing: 'sm',
-          contents: [{
-            type: 'button',
-            style: 'primary',
-            color: '#4A90E2',
-            action: {
-              type: 'postback',
-              label: '🔍 查詢',
-              data: `city=${city.code}`,
-              displayText: `查詢 ${city.displayName}`
-            }
-          }]
-        }
-      }))
-    }
-  };
-  
-  const helpText = {
-    type: 'text',
-    text: '請輸入城市代碼查詢：\n1=臺北市 2=新北市 3=基隆市\n4=宜蘭縣 5=花蓮縣 6=臺東縣\n7=屏東縣 8=高雄市 9=臺南市\nA=雲林縣 B=嘉義縣 C=彰化縣\nD=臺中市 E=南投縣 F=苗栗縣\nG=桃園市 H=金門縣 I=澎湖縣'
-  };
-  
-  await replyMessage(replyToken, [helpText, carousel]);
+  await replyMessage(replyToken, helpText);
 }
 
-// 發送訊息
-async function replyMessage(replyToken, messages) {
-  if (!Array.isArray(messages)) {
-    messages = [{ type: 'text', text: messages }];
-  }
-  
+async function replyMessage(replyToken, text) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/reply', {
       replyToken: replyToken,
-      messages: messages
+      messages: [{ type: 'text', text: text }]
     }, {
       headers: {
         'Content-Type': 'application/json',
@@ -294,10 +214,9 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'LINE Bot is running' });
 });
 
-// 啟動伺服器 - 務必監聽正確的 PORT
+// 啟動伺服器
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 API 金鑰已設定: ${CWA_AUTH_KEY ? '是' : '否'}`);
-  console.log(`🤖 LINE Token 已設定: ${CHANNEL_ACCESS_TOKEN ? '是' : '否'}`);
+  console.log(`✅ 服務已啟動，等待 LINE Webhook...`);
 });
