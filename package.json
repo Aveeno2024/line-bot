@@ -1,7 +1,7 @@
 {
-  "name": "skin-humidity-index-bot",
-  "version": "2.0.0",
-  "description": "皮膚濕度衝擊指數 LINE Bot",
+  "name": "line-environment-bot",
+  "version": "1.0.0",
+  "description": "LINE Bot for environmental index",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
