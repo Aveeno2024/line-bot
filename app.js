@@ -12,9 +12,9 @@ const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
-// 室內環境設定（根據簡報建議）
-const INDOOR_TEMP = 26;  // 台電/能源局建議 26℃
-const INDOOR_HUM_RATIO = 0.5;  // 室內濕度 = 室外濕度 × 0.5 (ASHRAE 實測係數)
+// 室內環境設定
+const INDOOR_TEMP = 26;
+const INDOOR_HUM_RATIO = 0.5;
 
 // 燈號閾值
 const THRESHOLDS = {
@@ -22,7 +22,7 @@ const THRESHOLDS = {
   SHOCK: { LOW: 10, MEDIUM: 20, HIGH: 30 }
 };
 
-// 城市列表（使用中央氣象署測站名稱）
+// 城市列表
 const CITIES = [
   { code: "1", name: "臺北市", displayName: "臺北市", stationName: "臺北" },
   { code: "2", name: "新北市", displayName: "新北市", stationName: "板橋" },
@@ -44,7 +44,7 @@ const CITIES = [
   { code: "I", name: "澎湖縣", displayName: "澎湖縣", stationName: "澎湖" }
 ];
 
-// 類比資料（API 失敗時備用）
+// 類比資料
 const MOCK_WEATHER = {
   "臺北市": { temp: 32, humidity: 58 },
   "新北市": { temp: 31, humidity: 60 },
@@ -67,12 +67,11 @@ const MOCK_WEATHER = {
 };
 
 // ==========================================
-// 用戶訂閱列表（用於主動推播）
+// 用戶訂閱列表
 // ==========================================
 let subscribers = [];
 const SUBSCRIBERS_FILE = './subscribers.json';
 
-// 讀取儲存的訂閱用戶
 try {
   if (fs.existsSync(SUBSCRIBERS_FILE)) {
     const data = fs.readFileSync(SUBSCRIBERS_FILE, 'utf8');
@@ -83,7 +82,6 @@ try {
   console.log('📋 無訂閱記錄，將建立新檔案');
 }
 
-// 儲存訂閱用戶
 function saveSubscribers() {
   fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(subscribers, null, 2));
 }
@@ -123,9 +121,6 @@ async function getRealWeather(city) {
   }
 }
 
-// ==========================================
-// 取得天氣（真實 API + 備援）
-// ==========================================
 async function getWeather(city) {
   const realWeather = await getRealWeather(city);
   if (realWeather) {
@@ -135,9 +130,6 @@ async function getWeather(city) {
   return MOCK_WEATHER[city.name] || { temp: 28, humidity: 60 };
 }
 
-// ==========================================
-// 計算環境指數（根據簡報公式）
-// ==========================================
 function calculateIndex(weather) {
   const indoorHumidity = Math.round(weather.humidity * INDOOR_HUM_RATIO);
   
@@ -187,9 +179,6 @@ function calculateIndex(weather) {
   };
 }
 
-// ==========================================
-// 生成指數貼文
-// ==========================================
 function generatePostContent(city, weather, index, includeScientificNote = true) {
   const date = new Date().toLocaleString('zh-TW', { 
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' 
@@ -222,9 +211,6 @@ function generatePostContent(city, weather, index, includeScientificNote = true)
   return content;
 }
 
-// ==========================================
-// 生成全台摘要
-// ==========================================
 async function generateTaiwanSummary() {
   const results = [];
   
@@ -274,14 +260,12 @@ async function generateTaiwanSummary() {
   }
   
   summary += `\n📊 詳細查詢：輸入城市代碼（1=臺北市, 2=新北市...）\n`;
-  summary += `🔔 訂閱每日提醒：輸入「加入訂閱」`;
+  summary += `🔔 訂閱每日提醒：輸入「加入訂閱」\n`;
+  summary += `🔕 取消每日提醒：輸入「取消訂閱」`;
   
   return summary;
 }
 
-// ==========================================
-// 主動推播給所有訂閱用戶
-// ==========================================
 async function pushToSubscribers(message) {
   if (subscribers.length === 0) {
     console.log('📭 尚無訂閱用戶');
@@ -306,9 +290,6 @@ async function pushToSubscribers(message) {
   }
 }
 
-// ==========================================
-// 每日定時發布任務
-// ==========================================
 async function dailyPublishTask() {
   console.log(`\n📅 ===== 開始每日發布任務 ${new Date().toLocaleString()} =====`);
   
@@ -338,17 +319,19 @@ app.post('/webhook', async (req, res) => {
         if (!subscribers.includes(userId)) {
           subscribers.push(userId);
           saveSubscribers();
-          console.log(`✅ 新用戶訂閱: ${userId}`);
+          console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
           await replyMessage(replyToken, 
             `🎉 歡迎加入【皮膚濕度衝擊指數】！
 
-📋 已為您開啟每日提醒，每天上午 8:00 會收到全台指數摘要。
+📋 已為您「自動開啟」每日提醒，每天上午 8:00 會收到全台指數摘要。
 
 📱 查詢方式：
 • 輸入城市代碼（1=臺北市, 2=新北市...）
 • 輸入「全台」查詢今日摘要
+
+🔔 訂閱管理：
 • 輸入「加入訂閱」開啟每日提醒
-• 輸入「取消訂閱」停止每日提醒
+• 輸入「取消訂閱」關閉每日提醒
 
 📖 本指數依據 Denda et al. (2002) 等國際期刊研究設計`);
         }
@@ -362,7 +345,7 @@ app.post('/webhook', async (req, res) => {
         if (index !== -1) {
           subscribers.splice(index, 1);
           saveSubscribers();
-          console.log(`❌ 用戶取消訂閱: ${userId}`);
+          console.log(`❌ 用戶封鎖並取消訂閱: ${userId}`);
         }
         continue;
       }
@@ -372,39 +355,71 @@ app.post('/webhook', async (req, res) => {
         const input = event.message.text.trim();
         const userId = event.source.userId;
         
+        // ==========================================
         // 取消訂閱
+        // ==========================================
         if (input === '取消訂閱') {
           const idx = subscribers.indexOf(userId);
           if (idx !== -1) {
             subscribers.splice(idx, 1);
             saveSubscribers();
-            await replyMessage(replyToken, '✅ 已取消每日提醒，感謝您的使用！輸入「加入訂閱」可重新訂閱。');
+            console.log(`🔕 用戶取消訂閱: ${userId}`);
+            await replyMessage(replyToken, 
+              `✅ 已取消每日提醒！
+
+您將不再收到每日上午 8:00 的全台指數摘要。
+
+💡 如需重新開啟提醒，請輸入「加入訂閱」`);
           } else {
-            await replyMessage(replyToken, '您尚未訂閱每日提醒。輸入「加入訂閱」即可開啟。');
+            await replyMessage(replyToken, 
+              `ℹ️ 您尚未訂閱每日提醒，無需取消。
+
+💡 如需開啟每日提醒，請輸入「加入訂閱」`);
           }
           continue;
         }
         
+        // ==========================================
         // 加入訂閱
+        // ==========================================
         if (input === '加入訂閱') {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
             saveSubscribers();
-            await replyMessage(replyToken, '✅ 訂閱成功！每天上午 8:00 會收到全台指數摘要。');
+            console.log(`🔔 用戶加入訂閱: ${userId}`);
+            await replyMessage(replyToken, 
+              `✅ 訂閱成功！
+
+您將在每天上午 8:00 收到全台皮膚濕度衝擊指數摘要。
+
+📱 查詢方式：
+• 輸入城市代碼（1=臺北市, 2=新北市...）
+• 輸入「全台」立即查詢今日摘要
+
+🔕 如需取消提醒，請輸入「取消訂閱」`);
           } else {
-            await replyMessage(replyToken, '您已經訂閱囉！每天上午 8:00 會收到全台指數摘要。');
+            await replyMessage(replyToken, 
+              `ℹ️ 您已經是訂閱用戶囉！
+
+您會在每天上午 8:00 收到全台指數摘要。
+
+🔕 如需取消提醒，請輸入「取消訂閱」`);
           }
           continue;
         }
         
+        // ==========================================
         // 全台摘要
+        // ==========================================
         if (input === '全台' || input === 'ALL') {
           const summary = await generateTaiwanSummary();
           await replyMessage(replyToken, summary);
           continue;
         }
         
+        // ==========================================
         // 城市查詢
+        // ==========================================
         const upperInput = input.toUpperCase();
         const city = CITIES.find(c => c.code === upperInput);
         
@@ -430,11 +445,9 @@ async function sendHelp(replyToken) {
   const help = `📱 【皮膚濕度衝擊指數查詢】
 
 🏠 室內基準：${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}
-
 📖 科學依據：Denda et al. (2002) - 濕度驟降破壞皮膚屏障
 
-🔍 查詢方式：
-• 輸入城市代碼查詢
+🔍 城市代碼查詢：
 1=臺北市  2=新北市  3=基隆市
 4=宜蘭縣  5=花蓮縣  6=臺東縣
 7=屏東縣  8=高雄市  9=臺南市
@@ -442,6 +455,7 @@ A=雲林縣  B=嘉義縣  C=彰化縣
 D=臺中市  E=南投縣  F=苗栗縣
 G=桃園市  H=金門縣  I=澎湖縣
 
+📊 其他指令：
 • 輸入「全台」查詢今日摘要
 • 輸入「加入訂閱」開啟每日提醒（每天 08:00）
 • 輸入「取消訂閱」停止提醒`;
@@ -449,9 +463,6 @@ G=桃園市  H=金門縣  I=澎湖縣
   await replyMessage(replyToken, help);
 }
 
-// ==========================================
-// 發送 LINE 訊息
-// ==========================================
 async function replyMessage(replyToken, text) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/reply', {
@@ -469,9 +480,6 @@ async function replyMessage(replyToken, text) {
   }
 }
 
-// ==========================================
-// 健康檢查
-// ==========================================
 app.get('/', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -491,9 +499,6 @@ schedule.scheduleJob('0 8 * * *', () => {
 
 console.log('📅 已設定每日發布排程：每天早上 8:00');
 
-// ==========================================
-// 啟動伺服器
-// ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 ========================================`);
