@@ -196,7 +196,7 @@ function calculateIndex(weather) {
 }
 
 // ==========================================
-// 產生單一城市 Flex Message
+// 產生單一城市 Flex Message（修正版）
 // ==========================================
 function generateCityFlexMessage(city, weather, index) {
   const date = new Date();
@@ -254,15 +254,7 @@ function generateCityFlexMessage(city, weather, index) {
             layout: "horizontal",
             contents: [
               { type: "text", text: "燈號", size: "xs", color: "#999999" },
-              {
-                type: "box",
-                layout: "horizontal",
-                contents: [
-                  { type: "text", text: "●", size: "lg", color: index.drynessColor },
-                  { type: "text", text: ` ${index.drynessLevel} (${index.drynessLevelEn})`, size: "xs", color: "#666666" }
-                ],
-                align: "end"
-              }
+              { type: "text", text: `● ${index.drynessLevel} (${index.drynessLevelEn})`, size: "xs", color: index.drynessColor, align: "end" }
             ]
           },
           {
@@ -287,15 +279,7 @@ function generateCityFlexMessage(city, weather, index) {
             layout: "horizontal",
             contents: [
               { type: "text", text: "燈號", size: "xs", color: "#999999" },
-              {
-                type: "box",
-                layout: "horizontal",
-                contents: [
-                  { type: "text", text: "●", size: "lg", color: index.shockColor },
-                  { type: "text", text: ` ${index.shockLevel} (${index.shockLevelEn})`, size: "xs", color: "#666666" }
-                ],
-                align: "end"
-              }
+              { type: "text", text: `● ${index.shockLevel} (${index.shockLevelEn})`, size: "xs", color: index.shockColor, align: "end" }
             ]
           },
           {
@@ -331,7 +315,7 @@ function generateCityFlexMessage(city, weather, index) {
 }
 
 // ==========================================
-// 產生全台摘要 Flex Message
+// 產生全台摘要 Flex Message（修正版）
 // ==========================================
 async function generateTaiwanSummaryFlex() {
   const results = [];
@@ -413,9 +397,31 @@ async function generateTaiwanSummaryFlex() {
 }
 
 // ==========================================
+// 產生純文字備援訊息
+// ==========================================
+function generateTextMessage(city, weather, index) {
+  const date = new Date();
+  const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
+  
+  return `🌡️💧 【${city.displayName} 皮膚濕度衝擊指數】${dateStr}
+
+🏠 室內環境：冷氣房 ${INDOOR_TEMP}℃
+🌤️ 室外環境：${weather.temp}℃  ${weather.humidity}%
+
+🌡️ 皮膚乾燥指數：${index.drynessLevel} (${index.drynessScore}分)
+   💡 ${index.drynessAdvice}
+
+💧 濕度衝擊指數：${index.shockLevel} (衝擊差 ${index.shockValue}%)
+   💡 ${index.shockAdvice}
+
+📊 資料來源：中央氣象署
+📖 依據 Denda et al. (2002)`;
+}
+
+// ==========================================
 // 發送訊息函式
 // ==========================================
-async function pushToSubscribersFlex(message) {
+async function pushToSubscribers(message) {
   if (subscribers.length === 0) {
     console.log('📭 尚無訂閱用戶');
     return;
@@ -425,7 +431,7 @@ async function pushToSubscribersFlex(message) {
     try {
       await axios.post('https://api.line.me/v2/bot/message/push', {
         to: userId,
-        messages: [message]
+        messages: [{ type: 'text', text: message }]
       }, {
         headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
       });
@@ -439,28 +445,42 @@ async function pushToSubscribersFlex(message) {
 
 async function dailyPublishTask() {
   console.log(`\n📅 ===== 開始每日發布任務 =====`);
-  const summaryFlex = await generateTaiwanSummaryFlex();
-  await pushToSubscribersFlex(summaryFlex);
+  const summary = await generateTaiwanSummaryText();
+  await pushToSubscribers(summary);
   console.log(`✅ 每日發布任務完成\n`);
 }
 
-async function replyFlexMessage(replyToken, flexMessage) {
-  try {
-    await axios.post('https://api.line.me/v2/bot/message/reply', {
-      replyToken: replyToken,
-      messages: [flexMessage]
-    }, {
-      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
-    });
-    console.log('✅ Flex Message 回復成功');
-  } catch (err) {
-    console.error('❌ Flex Message 回復失敗:', err.response?.data || err.message);
-    // 如果 Flex 失敗，改用純文字
-    await replyTextMessage(replyToken, "無法顯示卡片，請稍後再試");
+async function generateTaiwanSummaryText() {
+  const results = [];
+  for (const city of CITIES) {
+    const weather = await getWeather(city);
+    const index = calculateIndex(weather);
+    results.push({ city: city.displayName, shockValue: index.shockValue });
+    await new Promise(r => setTimeout(r, 300));
   }
+  
+  const danger = results.filter(r => r.shockValue >= 30);
+  const high = results.filter(r => r.shockValue >= 20 && r.shockValue < 30);
+  const medium = results.filter(r => r.shockValue >= 10 && r.shockValue < 20);
+  const low = results.filter(r => r.shockValue < 10);
+  
+  const date = new Date();
+  const dateStr = `${date.getMonth()+1}/${date.getDate()}`;
+  
+  let message = `🌡️💧 【全台皮膚濕度衝擊指數摘要】${dateStr}\n\n`;
+  message += `🏠 室內基準：${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}\n`;
+  message += `📖 依據 Denda et al. (2002)\n\n`;
+  message += `🔴 危險衝擊 (≥30%):\n${danger.length > 0 ? danger.map(c => c.city).join("、") : "無"}\n\n`;
+  message += `🟠 高衝擊 (20-29%):\n${high.length > 0 ? high.map(c => c.city).join("、") : "無"}\n\n`;
+  message += `🟡 中衝擊 (10-19%):\n${medium.length > 0 ? medium.map(c => c.city).join("、") : "無"}\n\n`;
+  message += `🟢 低衝擊 (<10%):\n${low.length > 0 ? low.map(c => c.city).join("、") : "無"}\n\n`;
+  message += `💡 查詢詳細：輸入城市代碼（1=臺北市, 2=新北市...）\n`;
+  message += `🔔 訂閱每日提醒：輸入「加入訂閱」`;
+  
+  return message;
 }
 
-async function replyTextMessage(replyToken, text) {
+async function replyMessage(replyToken, text) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/reply', {
       replyToken: replyToken,
@@ -468,7 +488,7 @@ async function replyTextMessage(replyToken, text) {
     }, {
       headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
-    console.log('✅ 文字回復成功');
+    console.log('✅ 回復成功');
   } catch (err) {
     console.error('❌ 回復失敗:', err.response?.data || err.message);
   }
@@ -494,7 +514,7 @@ app.post('/webhook', async (req, res) => {
           subscribers.push(userId);
           saveSubscribers();
           console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
-          await replyTextMessage(replyToken, 
+          await replyMessage(replyToken, 
             `🎉 歡迎加入【皮膚濕度衝擊指數】！
 
 📋 已為您自動開啟每日提醒，每天上午 8:00 收到全台指數摘要。
@@ -534,9 +554,9 @@ app.post('/webhook', async (req, res) => {
           if (idx !== -1) {
             subscribers.splice(idx, 1);
             saveSubscribers();
-            await replyTextMessage(replyToken, '✅ 已取消每日提醒！輸入「加入訂閱」可重新開啟。');
+            await replyMessage(replyToken, '✅ 已取消每日提醒！輸入「加入訂閱」可重新開啟。');
           } else {
-            await replyTextMessage(replyToken, 'ℹ️ 您尚未訂閱，無需取消。');
+            await replyMessage(replyToken, 'ℹ️ 您尚未訂閱，無需取消。');
           }
           continue;
         }
@@ -545,16 +565,16 @@ app.post('/webhook', async (req, res) => {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
             saveSubscribers();
-            await replyTextMessage(replyToken, '✅ 訂閱成功！每天上午 8:00 收到全台指數摘要。');
+            await replyMessage(replyToken, '✅ 訂閱成功！每天上午 8:00 收到全台指數摘要。');
           } else {
-            await replyTextMessage(replyToken, 'ℹ️ 您已經是訂閱用戶囉！');
+            await replyMessage(replyToken, 'ℹ️ 您已經是訂閱用戶囉！');
           }
           continue;
         }
         
         if (input === '全台' || input === 'ALL') {
-          const summaryFlex = await generateTaiwanSummaryFlex();
-          await replyFlexMessage(replyToken, summaryFlex);
+          const summary = await generateTaiwanSummaryText();
+          await replyMessage(replyToken, summary);
           continue;
         }
         
@@ -566,10 +586,10 @@ app.post('/webhook', async (req, res) => {
         if (city) {
           const weather = await getWeather(city);
           const index = calculateIndex(weather);
-          const flexMessage = generateCityFlexMessage(city, weather, index);
-          await replyFlexMessage(replyToken, flexMessage);
+          const message = generateTextMessage(city, weather, index);
+          await replyMessage(replyToken, message);
         } else {
-          await replyTextMessage(replyToken, 
+          await replyMessage(replyToken, 
             `📱 請輸入城市代碼查詢：
 
 1=臺北市  2=新北市  3=基隆市
@@ -615,6 +635,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}`);
   console.log(`📅 每日推播：上午 8:00 (台灣時間)`);
-  console.log(`🎨 訊息格式：Flex Message (卡片式)`);
   console.log(`========================================\n`);
 });
