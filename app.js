@@ -68,8 +68,10 @@ async function saveTodayHumidity(cityName, humidity) {
 // ==========================================
 // 從中央氣象署預報 API 獲取天氣
 // ==========================================
+// ==========================================
+// 從中央氣象署預報 API 獲取天氣（修正版）
+// ==========================================
 async function getForecastWeather(city, dateOffset = 0) {
-  // 先測試 API 是否可用
   console.log(`🌡️ 嘗試獲取 ${city.displayName} 預報資料 (dateOffset=${dateOffset})...`);
   
   try {
@@ -80,35 +82,88 @@ async function getForecastWeather(city, dateOffset = 0) {
     
     console.log(`   API 回應 success: ${data.success}`);
     
-    if (data.success === "true" && data.records?.Locations?.[0]?.Location) {
-      const locations = data.records.Locations[0].Location;
-      const targetLocation = locations.find(l => l.LocationName === city.apiName);
-      
-      if (targetLocation && targetLocation.WeatherElement) {
-        const tempElem = targetLocation.WeatherElement.find(w => w.ElementName === "平均溫度");
-        const humElem = targetLocation.WeatherElement.find(w => w.ElementName === "平均相對濕度");
-        
-        if (tempElem?.Time && humElem?.Time) {
-          const timeIndex = Math.min(dateOffset, tempElem.Time.length - 1);
-          const tempData = tempElem.Time[timeIndex]?.ElementValue?.[0]?.value;
-          const humData = humElem.Time[timeIndex]?.ElementValue?.[0]?.value;
-          
-          if (tempData && humData) {
-            console.log(`   ✅ ${city.displayName}: ${tempData}℃, ${humData}%`);
-            return {
-              temp: Math.round(parseFloat(tempData)),
-              humidity: Math.round(parseFloat(humData))
-            };
+    if (data.success !== "true") {
+      console.log(`   ⚠️ API 回應失敗: ${data.success}`);
+      return null;
+    }
+    
+    // 檢查資料結構
+    if (!data.records || !data.records.Locations) {
+      console.log(`   ⚠️ 沒有 Locations 資料`);
+      return null;
+    }
+    
+    // 遍歷 Locations 找到匹配的城市
+    let targetLocation = null;
+    for (const locationSet of data.records.Locations) {
+      if (locationSet.Location && locationSet.Location.length > 0) {
+        for (const loc of locationSet.Location) {
+          if (loc.LocationName === city.apiName) {
+            targetLocation = loc;
+            break;
           }
         }
       }
+      if (targetLocation) break;
     }
-    console.log(`   ⚠️ 無法解析 ${city.displayName} 的預報資料`);
+    
+    if (!targetLocation) {
+      console.log(`   ⚠️ 找不到 ${city.apiName} 的 Location 資料`);
+      // 列出可用的城市名稱
+      if (data.records.Locations && data.records.Locations[0]?.Location) {
+        const availableCities = data.records.Locations[0].Location.map(l => l.LocationName).join(', ');
+        console.log(`   可用的城市: ${availableCities}`);
+      }
+      return null;
+    }
+    
+    console.log(`   ✅ 找到 ${targetLocation.LocationName}`);
+    
+    if (!targetLocation.WeatherElement) {
+      console.log(`   ⚠️ 沒有 WeatherElement 資料`);
+      return null;
+    }
+    
+    // 找溫度
+    const tempElem = targetLocation.WeatherElement.find(w => 
+      w.ElementName === "平均溫度" || w.ElementName === "溫度"
+    );
+    
+    // 找濕度
+    const humElem = targetLocation.WeatherElement.find(w => 
+      w.ElementName === "平均相對濕度" || w.ElementName === "相對濕度"
+    );
+    
+    if (!tempElem || !humElem) {
+      console.log(`   ⚠️ 找不到溫度或濕度元素`);
+      if (targetLocation.WeatherElement) {
+        const availableElements = targetLocation.WeatherElement.map(w => w.ElementName).join(', ');
+        console.log(`   可用元素: ${availableElements}`);
+      }
+      return null;
+    }
+    
+    // 取得對應時間的資料
+    const timeIndex = Math.min(dateOffset, (tempElem.Time?.length || 1) - 1);
+    
+    const tempData = tempElem.Time?.[timeIndex]?.ElementValue?.[0]?.value;
+    const humData = humElem.Time?.[timeIndex]?.ElementValue?.[0]?.value;
+    
+    if (tempData && humData) {
+      console.log(`   ✅ ${city.displayName}: ${tempData}℃, ${humData}%`);
+      return {
+        temp: Math.round(parseFloat(tempData)),
+        humidity: Math.round(parseFloat(humData))
+      };
+    }
+    
+    console.log(`   ⚠️ 溫度或濕度值為空: temp=${tempData}, hum=${humData}`);
     return null;
+    
   } catch (error) {
     console.error(`   ❌ ${city.displayName} API錯誤:`, error.message);
     if (error.response) {
-      console.error(`   HTTP ${error.response.status}: ${JSON.stringify(error.response.data).substring(0, 200)}`);
+      console.error(`   HTTP ${error.response.status}`);
     }
     return null;
   }
