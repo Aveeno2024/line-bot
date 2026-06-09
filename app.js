@@ -525,7 +525,7 @@ app.get('/', (req, res) => {
 // ==========================================
 // 每日排程（台灣時間 9:00 = UTC 01:00）
 // ==========================================
-schedule.scheduleJob('0 1 * * *', () => {
+schedule.scheduleJob('* * * * *', () => {
   console.log(`📅 執行每日推播 - ${new Date().toISOString()}`);
   dailyPublishTask();
 });
