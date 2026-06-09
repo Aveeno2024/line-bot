@@ -423,7 +423,7 @@ app.post('/webhook', async (req, res) => {
           await replyTextMessage(replyToken, 
             `🎉 歡迎加入【皮膚濕度衝擊指數】！
 
-📋 已為您自動開啟每日提醒，每天上午 9:00 收到全台指數摘要。
+📋 已為您自動開啟每日提醒，每天上午 8:00 收到全台指數摘要。
 
 📱 查詢方式：
 • 輸入城市代碼（1=臺北市, 2=新北市...）
@@ -471,7 +471,7 @@ app.post('/webhook', async (req, res) => {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
             saveSubscribers();
-            await replyTextMessage(replyToken, '✅ 訂閱成功！每天上午 9:00 收到全台指數摘要。');
+            await replyTextMessage(replyToken, '✅ 訂閱成功！每天上午 8:00 收到全台指數摘要。');
           } else {
             await replyTextMessage(replyToken, 'ℹ️ 您已經是訂閱用戶囉！');
           }
@@ -523,9 +523,9 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 每日排程（台灣時間 9:00 = UTC 01:00）
+// 每日排程（台灣時間 8:00 = UTC 00:00）
 // ==========================================
-schedule.scheduleJob('* * * * *', () => {
+schedule.scheduleJob('0 0 * * *', () => {
   console.log(`📅 執行每日推播 - ${new Date().toISOString()}`);
   dailyPublishTask();
 });
@@ -536,7 +536,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}`);
-  console.log(`📅 每日推播：上午 9:00 (台灣時間)`);
+  console.log(`📅 每日推播：上午 8:00 (台灣時間)`);
   console.log(`========================================\n`);
 });
   
