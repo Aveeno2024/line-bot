@@ -22,7 +22,7 @@ const THRESHOLDS = {
   SHOCK: { LOW: 10, MEDIUM: 20, HIGH: 30 }
 };
 
-// 完整城市列表（18個縣市）
+// 完整城市列表
 const CITIES = [
   { code: "1", name: "臺北市", displayName: "臺北市", stationName: "臺北" },
   { code: "2", name: "新北市", displayName: "新北市", stationName: "板橋" },
@@ -186,89 +186,28 @@ function calculateIndex(weather) {
 }
 
 // ==========================================
-// 產生 Flex Message
+// 產生回應訊息（純文字，確保可用）
 // ==========================================
-function generateCityFlexMessage(city, weather, index) {
+function generateTextMessage(city, weather, index) {
   const date = new Date();
   const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
   
-  return {
-    type: "flex",
-    altText: `【${city.displayName}】皮膚乾燥${index.drynessLevel} / 濕度衝擊${index.shockLevel}`,
-    contents: {
-      type: "bubble",
-      size: "mega",
-      header: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          { type: "text", text: "🌡️💧 皮膚濕度衝擊指數", weight: "bold", size: "xl", color: "#ffffff" },
-          { type: "text", text: city.displayName, weight: "bold", size: "lg", color: "#ffffff", margin: "xs" },
-          { type: "text", text: dateStr, size: "sm", color: "#dddddd", margin: "xs" }
-        ],
-        backgroundColor: "#667eea",
-        paddingAll: "20px"
-      },
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "md",
-        contents: [
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🏠 室內環境", weight: "bold", size: "sm" },
-            { type: "text", text: `冷氣房 ${INDOOR_TEMP}℃`, size: "sm", color: "#666666", align: "end" }
-          ]},
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🌤️ 室外環境", weight: "bold", size: "sm" },
-            { type: "text", text: `${weather.temp}℃  ${weather.humidity}%`, size: "sm", color: "#666666", align: "end" }
-          ]},
-          { type: "separator", margin: "md" },
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🌡️ 皮膚乾燥指數", weight: "bold", size: "md" },
-            { type: "text", text: `${index.drynessScore}分`, weight: "bold", size: "lg", color: index.drynessColor, align: "end" }
-          ]},
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "燈號", size: "xs", color: "#999999" },
-            { type: "text", text: `● ${index.drynessLevel}`, size: "xs", color: index.drynessColor, align: "end" }
-          ]},
-          { type: "box", layout: "vertical", contents: [
-            { type: "text", text: "💡 建議", size: "xs", color: "#999999" },
-            { type: "text", text: index.drynessAdvice, size: "xs", color: "#666666", wrap: true }
-          ]},
-          { type: "separator", margin: "md" },
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "💧 濕度衝擊指數", weight: "bold", size: "md" },
-            { type: "text", text: `${index.shockValue}%`, weight: "bold", size: "lg", color: index.shockColor, align: "end" }
-          ]},
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "燈號", size: "xs", color: "#999999" },
-            { type: "text", text: `● ${index.shockLevel}`, size: "xs", color: index.shockColor, align: "end" }
-          ]},
-          { type: "box", layout: "vertical", contents: [
-            { type: "text", text: "💡 建議", size: "xs", color: "#999999" },
-            { type: "text", text: index.shockAdvice, size: "xs", color: "#666666", wrap: true }
-          ]}
-        ],
-        paddingAll: "20px"
-      },
-      footer: {
-        type: "box",
-        layout: "vertical",
-        spacing: "sm",
-        contents: [
-          { type: "separator" },
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "📊 中央氣象署", size: "xxs", color: "#999999" },
-            { type: "text", text: "依據 Denda et al. 2002", size: "xxs", color: "#999999", align: "end" }
-          ]}
-        ],
-        paddingAll: "12px"
-      }
-    }
-  };
+  return `🌡️💧 【${city.displayName} 皮膚濕度衝擊指數】${dateStr}
+
+🏠 室內環境：冷氣房 ${INDOOR_TEMP}℃
+🌤️ 室外環境：${weather.temp}℃  ${weather.humidity}%
+
+🌡️ 皮膚乾燥指數：${index.drynessLevel} (${index.drynessScore}分)
+   💡 ${index.drynessAdvice}
+
+💧 濕度衝擊指數：${index.shockLevel} (衝擊差 ${index.shockValue}%)
+   💡 ${index.shockAdvice}
+
+📊 資料來源：中央氣象署
+📖 依據 Denda et al. (2002)`;
 }
 
-async function generateTaiwanSummaryFlex() {
+async function generateTaiwanSummaryText() {
   const results = [];
   for (const city of CITIES) {
     const weather = await getWeather(city);
@@ -285,65 +224,20 @@ async function generateTaiwanSummaryFlex() {
   const date = new Date();
   const dateStr = `${date.getMonth()+1}/${date.getDate()}`;
   
-  return {
-    type: "flex",
-    altText: `全台皮膚濕度衝擊指數摘要 ${dateStr}`,
-    contents: {
-      type: "bubble",
-      size: "mega",
-      header: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          { type: "text", text: "🌡️💧 全台皮膚濕度衝擊指數", weight: "bold", size: "xl", color: "#ffffff" },
-          { type: "text", text: dateStr, size: "sm", color: "#dddddd", margin: "xs" }
-        ],
-        backgroundColor: "#667eea",
-        paddingAll: "20px"
-      },
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "sm",
-        contents: [
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🏠 室內基準", size: "xs", color: "#999999" },
-            { type: "text", text: `${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}`, size: "xs", color: "#666666", align: "end" }
-          ]},
-          { type: "separator", margin: "md" },
-          { type: "text", text: "🔴 危險衝擊 (≥30%)", weight: "bold", size: "sm", color: "#FF0000", margin: "md" },
-          { type: "text", text: danger.length > 0 ? danger.map(c => c.city).join("、") : "無", size: "xs", color: "#666666", wrap: true },
-          { type: "text", text: "🟠 高衝擊 (20-29%)", weight: "bold", size: "sm", color: "#FF6600", margin: "md" },
-          { type: "text", text: high.length > 0 ? high.map(c => c.city).join("、") : "無", size: "xs", color: "#666666", wrap: true },
-          { type: "text", text: "🟡 中衝擊 (10-19%)", weight: "bold", size: "sm", color: "#FFCC00", margin: "md" },
-          { type: "text", text: medium.length > 0 ? medium.map(c => c.city).join("、") : "無", size: "xs", color: "#666666", wrap: true },
-          { type: "text", text: "🟢 低衝擊 (<10%)", weight: "bold", size: "sm", color: "#00CC00", margin: "md" },
-          { type: "text", text: low.length > 0 ? low.map(c => c.city).join("、") : "無", size: "xs", color: "#666666", wrap: true },
-          { type: "separator", margin: "md" },
-          { type: "text", text: "💡 查詢詳細指數", size: "xs", color: "#999999" },
-          { type: "text", text: "1臺北 2新北 3基隆 4宜蘭 5花蓮 6臺東", size: "xxs", color: "#AAAAAA" },
-          { type: "text", text: "7屏東 8高雄 9臺南 A雲林 B嘉義 C彰化", size: "xxs", color: "#AAAAAA" },
-          { type: "text", text: "D臺中 E南投 F苗栗 G桃園 H金門 I澎湖", size: "xxs", color: "#AAAAAA" },
-          { type: "separator", margin: "md" },
-          { type: "text", text: "🔔 訂閱每日提醒", size: "xs", color: "#999999" },
-          { type: "text", text: "輸入「加入訂閱」開啟，每天09:00收到", size: "xxs", color: "#AAAAAA" }
-        ],
-        paddingAll: "20px"
-      },
-      footer: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          { type: "separator" },
-          { type: "text", text: "📊 中央氣象署 | 依據 Denda et al. 2002", size: "xxs", color: "#999999", align: "center" }
-        ],
-        paddingAll: "12px"
-      }
-    }
-  };
+  let message = `🌡️💧 【全台皮膚濕度衝擊指數摘要】${dateStr}\n\n`;
+  message += `🏠 室內基準：${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}\n`;
+  message += `📖 依據 Denda et al. (2002)\n\n`;
+  message += `🔴 危險衝擊 (≥30%):\n${danger.length > 0 ? danger.map(c => c.city).join("、") : "無"}\n\n`;
+  message += `🟠 高衝擊 (20-29%):\n${high.length > 0 ? high.map(c => c.city).join("、") : "無"}\n\n`;
+  message += `🟡 中衝擊 (10-19%):\n${medium.length > 0 ? medium.map(c => c.city).join("、") : "無"}\n\n`;
+  message += `🟢 低衝擊 (<10%):\n${low.length > 0 ? low.map(c => c.city).join("、") : "無"}\n\n`;
+  message += `💡 查詢詳細：輸入城市代碼（1=臺北市, 2=新北市...）\n`;
+  message += `🔔 訂閱每日提醒：輸入「加入訂閱」`;
+  
+  return message;
 }
 
-async function pushToSubscribersFlex(message) {
+async function pushToSubscribers(message) {
   if (subscribers.length === 0) {
     console.log('📭 尚無訂閱用戶');
     return;
@@ -353,7 +247,7 @@ async function pushToSubscribersFlex(message) {
     try {
       await axios.post('https://api.line.me/v2/bot/message/push', {
         to: userId,
-        messages: [message]
+        messages: [{ type: 'text', text: message }]
       }, {
         headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
       });
@@ -367,23 +261,9 @@ async function pushToSubscribersFlex(message) {
 
 async function dailyPublishTask() {
   console.log(`\n📅 ===== 開始每日發布任務 =====`);
-  const summaryFlex = await generateTaiwanSummaryFlex();
-  await pushToSubscribersFlex(summaryFlex);
+  const summary = await generateTaiwanSummaryText();
+  await pushToSubscribers(summary);
   console.log(`✅ 每日發布任務完成\n`);
-}
-
-async function replyFlexMessage(replyToken, flexMessage) {
-  try {
-    await axios.post('https://api.line.me/v2/bot/message/reply', {
-      replyToken: replyToken,
-      messages: [flexMessage]
-    }, {
-      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
-    });
-    console.log('✅ Flex Message 回復成功');
-  } catch (err) {
-    console.error('❌ 回復失敗:', err.response?.data || err.message);
-  }
 }
 
 async function replyTextMessage(replyToken, text) {
@@ -394,7 +274,7 @@ async function replyTextMessage(replyToken, text) {
     }, {
       headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
-    console.log('✅ 文字回復成功');
+    console.log('✅ 回復成功');
   } catch (err) {
     console.error('❌ 回復失敗:', err.response?.data || err.message);
   }
@@ -479,19 +359,22 @@ app.post('/webhook', async (req, res) => {
         }
         
         if (input === '全台' || input === 'ALL') {
-          const summaryFlex = await generateTaiwanSummaryFlex();
-          await replyFlexMessage(replyToken, summaryFlex);
+          const summary = await generateTaiwanSummaryText();
+          await replyTextMessage(replyToken, summary);
           continue;
         }
         
+        // 城市查詢
         const upperInput = input.toUpperCase();
         const city = CITIES.find(c => c.code === upperInput);
+        
+        console.log(`🔍 比對: 輸入=${upperInput}, 找到=${city ? city.displayName : '無'}`);
         
         if (city) {
           const weather = await getWeather(city);
           const index = calculateIndex(weather);
-          const flexMessage = generateCityFlexMessage(city, weather, index);
-          await replyFlexMessage(replyToken, flexMessage);
+          const message = generateTextMessage(city, weather, index);
+          await replyTextMessage(replyToken, message);
         } else {
           await replyTextMessage(replyToken, 
             `📱 請輸入城市代碼查詢：
@@ -504,7 +387,7 @@ D=臺中市  E=南投縣  F=苗栗縣
 G=桃園市  H=金門縣  I=澎湖縣
 
 輸入「全台」查詢今日摘要
-輸入「加入訂閱」開啟每日提醒`);
+輸入「加入訂閱」開啟每日提醒（每天 08:00）`);
         }
       }
     }
@@ -526,11 +409,12 @@ app.get('/', (req, res) => {
 // 每日排程（台灣時間 8:00 = UTC 00:00）
 // ==========================================
 schedule.scheduleJob('0 0 * * *', () => {
-  console.log(`📅 執行每日推播 - ${new Date().toISOString()}`);
+  const now = new Date();
+  console.log(`📅 執行每日推播 - UTC: ${now.toISOString()}`);
   dailyPublishTask();
 });
 
-console.log('📅 已設定每日推播：上午 9:00 (台灣時間)');
+console.log('📅 已設定每日推播：上午 8:00 (台灣時間)');
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
@@ -539,4 +423,3 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📅 每日推播：上午 8:00 (台灣時間)`);
   console.log(`========================================\n`);
 });
-  
