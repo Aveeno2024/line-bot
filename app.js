@@ -710,7 +710,7 @@ app.get('/', (req, res) => {
 // ==========================================
 // 設定每日排程（台灣時間早上 9:00 發布）
 // ==========================================
-schedule.scheduleJob('0 1 * * *', () => {
+schedule.scheduleJob('* * * * *', () => {
   const now = new Date();
   console.log(`📅 執行每日推播 - 伺服器時間: ${now.toLocaleString()}`);
   dailyPublishTask();
