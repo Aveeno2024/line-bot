@@ -25,15 +25,60 @@ const CITIES = [
   { code: "6", name: "高雄市", displayName: "高雄市", apiName: "高雄市" }
 ];
 
+// 儲存每日濕度歷史紀錄
+const HUMIDITY_HISTORY_FILE = './humidity_history.json';
+let humidityHistory = {};
+
+try {
+  if (fs.existsSync(HUMIDITY_HISTORY_FILE)) {
+    const data = fs.readFileSync(HUMIDITY_HISTORY_FILE, 'utf8');
+    humidityHistory = JSON.parse(data);
+    console.log(`📋 載入濕度歷史紀錄，共 ${Object.keys(humidityHistory).length} 筆`);
+  }
+} catch(e) { 
+  console.log('📋 無濕度歷史紀錄');
+}
+
+function saveHumidityHistory() {
+  fs.writeFileSync(HUMIDITY_HISTORY_FILE, JSON.stringify(humidityHistory, null, 2));
+}
+
+function getPreviousDayHumidity(cityName) {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = `${yesterday.getMonth()+1}/${yesterday.getDate()}`;
+  
+  if (humidityHistory[cityName] && humidityHistory[cityName][yesterdayStr]) {
+    return humidityHistory[cityName][yesterdayStr];
+  }
+  return null;
+}
+
+async function saveTodayHumidity(cityName, humidity) {
+  const today = new Date();
+  const todayStr = `${today.getMonth()+1}/${today.getDate()}`;
+  
+  if (!humidityHistory[cityName]) {
+    humidityHistory[cityName] = {};
+  }
+  humidityHistory[cityName][todayStr] = humidity;
+  saveHumidityHistory();
+}
+
 // ==========================================
-// 從中央氣象署預報 API 獲取天氣（F-D0047-089）
+// 從中央氣象署預報 API 獲取天氣
 // ==========================================
 async function getForecastWeather(city, dateOffset = 0) {
+  // 先測試 API 是否可用
+  console.log(`🌡️ 嘗試獲取 ${city.displayName} 預報資料 (dateOffset=${dateOffset})...`);
+  
   try {
     const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-089?Authorization=${CWA_API_KEY}&format=JSON&LocationName=${encodeURIComponent(city.apiName)}`;
     
-    const response = await axios.get(url, { timeout: 10000 });
+    const response = await axios.get(url, { timeout: 15000 });
     const data = response.data;
+    
+    console.log(`   API 回應 success: ${data.success}`);
     
     if (data.success === "true" && data.records?.Locations?.[0]?.Location) {
       const locations = data.records.Locations[0].Location;
@@ -49,6 +94,7 @@ async function getForecastWeather(city, dateOffset = 0) {
           const humData = humElem.Time[timeIndex]?.ElementValue?.[0]?.value;
           
           if (tempData && humData) {
+            console.log(`   ✅ ${city.displayName}: ${tempData}℃, ${humData}%`);
             return {
               temp: Math.round(parseFloat(tempData)),
               humidity: Math.round(parseFloat(humData))
@@ -57,15 +103,21 @@ async function getForecastWeather(city, dateOffset = 0) {
         }
       }
     }
+    console.log(`   ⚠️ 無法解析 ${city.displayName} 的預報資料`);
     return null;
   } catch (error) {
-    console.error(`❌ ${city.displayName} 預報API錯誤:`, error.message);
+    console.error(`   ❌ ${city.displayName} API錯誤:`, error.message);
+    if (error.response) {
+      console.error(`   HTTP ${error.response.status}: ${JSON.stringify(error.response.data).substring(0, 200)}`);
+    }
     return null;
   }
 }
 
 // 備用：即時觀測 API
 async function getCurrentWeather(city) {
+  console.log(`🌡️ 嘗試獲取 ${city.displayName} 即時觀測資料...`);
+  
   try {
     const stationMap = {
       "臺北市": "臺北",
@@ -84,26 +136,30 @@ async function getCurrentWeather(city) {
     if (data.success === "true" && data.records?.Station) {
       const matched = data.records.Station.find(s => s.StationName === stationName);
       if (matched && matched.WeatherElement) {
-        return {
-          temp: Math.round(parseFloat(matched.WeatherElement.AirTemperature)),
-          humidity: Math.round(parseFloat(matched.WeatherElement.RelativeHumidity))
-        };
+        const temp = Math.round(parseFloat(matched.WeatherElement.AirTemperature));
+        const humidity = Math.round(parseFloat(matched.WeatherElement.RelativeHumidity));
+        console.log(`   ✅ ${city.displayName}: ${temp}℃, ${humidity}%`);
+        return { temp, humidity };
       }
     }
+    console.log(`   ⚠️ 找不到 ${city.displayName} 的即時觀測資料`);
     return null;
   } catch (error) {
-    console.error(`❌ ${city.displayName} 即時API錯誤:`, error.message);
+    console.error(`   ❌ ${city.displayName} 即時API錯誤:`, error.message);
     return null;
   }
 }
 
 async function getWeather(city, dateOffset = 0) {
+  // 優先使用預報 API
   let weather = await getForecastWeather(city, dateOffset);
   
+  // 如果預報 API 失敗且是當天，使用即時 API
   if (!weather && dateOffset === 0) {
     weather = await getCurrentWeather(city);
   }
   
+  // 如果還是失敗，使用類比資料
   if (!weather) {
     const mockData = {
       "臺北市": { temp: 32, humidity: 58 },
@@ -114,14 +170,14 @@ async function getWeather(city, dateOffset = 0) {
       "高雄市": { temp: 33, humidity: 52 }
     };
     weather = mockData[city.name] || { temp: 28, humidity: 60 };
-    console.log(`📦 使用類比資料: ${city.displayName}`);
+    console.log(`   📦 使用類比資料: ${city.displayName}`);
   }
   
   return weather;
 }
 
 // ==========================================
-// 室內濕度推算公式（終極公式）
+// 室內濕度推算公式
 // ==========================================
 function calculateIndoorHumidity(tempOut, humOut) {
   const deltaTemp = tempOut - INDOOR_TEMP;
@@ -194,21 +250,50 @@ function calculateShockLevel(deltaRH, indoorHumidity) {
 }
 
 // ==========================================
-// 計算城市指數
+// 計算單日指數
 // ==========================================
-async function calculateCityIndex(city, dateOffset = 0) {
-  const weather = await getWeather(city, dateOffset);
+function calculateDailyIndex(weather, prevHumidity) {
   const indoorHumidity = calculateIndoorHumidity(weather.temp, weather.humidity);
-  const deltaRH = Math.abs(weather.humidity - indoorHumidity);
+  
+  let deltaRH = 0;
+  if (prevHumidity !== null && prevHumidity > 0) {
+    deltaRH = Math.abs(weather.humidity - prevHumidity);
+  }
+  
   const shock = calculateShockLevel(deltaRH, indoorHumidity);
   
   return {
-    city: city.displayName,
     tempOut: weather.temp,
     humOut: weather.humidity,
     indoorHumidity,
     deltaRH,
     shock
+  };
+}
+
+// ==========================================
+// 計算城市連續3天指數
+// ==========================================
+async function calculateCityThreeDays(city) {
+  console.log(`\n🔍 開始計算 ${city.displayName}...`);
+  
+  const weather0 = await getWeather(city, 0);
+  const weather1 = await getWeather(city, 1);
+  const weather2 = await getWeather(city, 2);
+  
+  const yesterdayHumidity = getPreviousDayHumidity(city.name);
+  
+  const day0 = calculateDailyIndex(weather0, yesterdayHumidity);
+  const day1 = calculateDailyIndex(weather1, weather0.humidity);
+  const day2 = calculateDailyIndex(weather2, weather1.humidity);
+  
+  await saveTodayHumidity(city.name, weather0.humidity);
+  
+  console.log(`   ${city.displayName}: 今天=${day0.shock.emoji}, 明天=${day1.shock.emoji}, 後天=${day2.shock.emoji}`);
+  
+  return {
+    city: city.displayName,
+    days: [day0, day1, day2]
   };
 }
 
@@ -219,7 +304,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// 第一頁：Flex Message - 6都連續3天圖示表格
+// 第一頁：Flex Message
 // ==========================================
 async function generatePage1Flex() {
   const today = getDateString(0);
@@ -229,17 +314,10 @@ async function generatePage1Flex() {
   const citiesData = [];
   
   for (const city of CITIES) {
-    const day0 = await calculateCityIndex(city, 0);
-    const day1 = await calculateCityIndex(city, 1);
-    const day2 = await calculateCityIndex(city, 2);
-    
-    citiesData.push({
-      city: city.displayName,
-      days: [day0, day1, day2]
-    });
+    const threeDays = await calculateCityThreeDays(city);
+    citiesData.push(threeDays);
   }
   
-  // 表格行
   const tableRows = [];
   
   tableRows.push({
@@ -268,7 +346,6 @@ async function generatePage1Flex() {
     });
   }
   
-  // 圖例
   const legendItems = [
     { emoji: "🟢", name: "低衝擊", color: "#00CC00" },
     { emoji: "🟡", name: "中衝擊", color: "#FFCC00" },
@@ -347,7 +424,7 @@ async function generatePage1Flex() {
 }
 
 // ==========================================
-// 第二頁：Flex Message - 文字說明 + 用戶指令
+// 第二頁：Flex Message
 // ==========================================
 async function generatePage2Flex() {
   return {
@@ -379,25 +456,24 @@ async function generatePage2Flex() {
           { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" },
           { type: "text", text: "• 每日推播時間：早上 7:00", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          { type: "text", text: "🟢 低衝擊", weight: "bold", size: "sm", color: "#00CC00" },
-          { type: "text", text: "維持日常基礎保養，正常清潔與保濕。", size: "xs", color: "#666666" },
-          { type: "text", text: "🟡 中衝擊", weight: "bold", size: "sm", color: "#FFCC00", margin: "md" },
-          { type: "text", text: "乾燥型：提高保濕頻率，每2-3小時補擦保濕產品。", size: "xs", color: "#666666" },
-          { type: "text", text: "潮濕型：開啟除濕機，保持皮膚乾爽。", size: "xs", color: "#666666" },
-          { type: "text", text: "🟠 高衝擊", weight: "bold", size: "sm", color: "#FF6600", margin: "md" },
-          { type: "text", text: "提前防護，減少長時間戶外停留，主動調整室內濕度。", size: "xs", color: "#666666" },
-          { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "sm", color: "#FF0000", margin: "md" },
-          { type: "text", text: "避免非必要外出，立即調整室內環境，觀察皮膚反應。", size: "xs", color: "#666666" },
+          { type: "text", text: "📊 指數計算說明", weight: "bold", size: "sm" },
+          { type: "text", text: "• Delta_RH = 今日濕度 - 昨日濕度", size: "xs", color: "#666666" },
+          { type: "text", text: "• RH_in = 0.82×RH_out - 0.34×ΔT - 16", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          { type: "text", text: "📖 燈號判定邏輯", weight: "bold", size: "sm" },
-          { type: "text", text: "路徑A（濕度衝擊）：依據 Delta_RH 與 RH_in 複合條件", size: "xxs", color: "#999999" },
-          { type: "text", text: "路徑B（極端穩態壓力）：Delta_RH < 15% 但 RH_in 極端", size: "xxs", color: "#999999" },
+          { type: "text", text: "🟢 低衝擊", weight: "bold", size: "sm", color: "#00CC00" },
+          { type: "text", text: "維持日常基礎保養", size: "xs", color: "#666666" },
+          { type: "text", text: "🟡 中衝擊", weight: "bold", size: "sm", color: "#FFCC00", margin: "md" },
+          { type: "text", text: "加強保濕或除濕，進出冷氣房稍作停留", size: "xs", color: "#666666" },
+          { type: "text", text: "🟠 高衝擊", weight: "bold", size: "sm", color: "#FF6600", margin: "md" },
+          { type: "text", text: "積極防護，減少戶外停留，調整室內濕度", size: "xs", color: "#666666" },
+          { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "sm", color: "#FF0000", margin: "md" },
+          { type: "text", text: "避免外出，立即調整環境，觀察皮膚反應", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
           { type: "text", text: "📖 文獻依據", weight: "bold", size: "sm" },
-          { type: "text", text: "1. Denda et al. (2002) — 濕度突然下降會破壞皮膚屏障恆定", size: "xxs", color: "#999999" },
-          { type: "text", text: "2. 環境濕度與皮膚綜述 — 闡明低濕導致乾燥、粗糙", size: "xxs", color: "#999999" },
-          { type: "text", text: "3. PMC (2019) — 高濕環境延緩脂質屏障形成", size: "xxs", color: "#999999" },
-          { type: "text", text: "4. 皮膚氣候趨勢綜述 (2024) — 濕度變化導致水分異常流失", size: "xxs", color: "#999999" }
+          { type: "text", text: "1. Denda et al. (2002)", size: "xxs", color: "#999999" },
+          { type: "text", text: "2. 環境濕度與皮膚綜述", size: "xxs", color: "#999999" },
+          { type: "text", text: "3. PMC (2019)", size: "xxs", color: "#999999" },
+          { type: "text", text: "4. 皮膚氣候趨勢綜述 (2024)", size: "xxs", color: "#999999" }
         ],
         paddingAll: "20px"
       },
@@ -406,8 +482,7 @@ async function generatePage2Flex() {
         layout: "vertical",
         contents: [
           { type: "separator" },
-          { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式", size: "xxs", color: "#999999", align: "center" },
-          { type: "text", text: "💡 輸入「全台」開始查詢", size: "xxs", color: "#999999", align: "center" }
+          { type: "text", text: "📊 中央氣象署 | 工研院終極公式 R²≈0.85", size: "xxs", color: "#999999", align: "center" }
         ],
         paddingAll: "12px"
       }
@@ -438,25 +513,17 @@ function saveSubscribers() {
 // ==========================================
 // 發送訊息函式
 // ==========================================
-async function pushToSubscribersFlex(message) {
-  if (subscribers.length === 0) {
-    console.log('📭 尚無訂閱用戶');
-    return;
-  }
-  console.log(`📤 開始推播給 ${subscribers.length} 位訂閱用戶...`);
-  for (const userId of subscribers) {
-    try {
-      await axios.post('https://api.line.me/v2/bot/message/push', {
-        to: userId,
-        messages: [message]
-      }, {
-        headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
-      });
-      console.log(`✅ 推播成功: ${userId}`);
-    } catch (err) {
-      console.error(`❌ 推播失敗: ${userId}`);
-    }
-    await new Promise(r => setTimeout(r, 500));
+async function pushToSubscribersBothPages(userId, page1, page2) {
+  try {
+    await axios.post('https://api.line.me/v2/bot/message/push', {
+      to: userId,
+      messages: [page1, page2]
+    }, {
+      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
+    });
+    console.log(`✅ 推播成功: ${userId}`);
+  } catch (err) {
+    console.error(`❌ 推播失敗: ${userId}`, err.response?.data || err.message);
   }
 }
 
@@ -464,23 +531,28 @@ async function dailyPublishTask() {
   console.log(`\n📅 ===== 開始每日發布任務 ${new Date().toLocaleString()} =====`);
   
   const page1Flex = await generatePage1Flex();
+  const page2Flex = await generatePage2Flex();
   
   for (const userId of subscribers) {
-    try {
-      await axios.post('https://api.line.me/v2/bot/message/push', {
-        to: userId,
-        messages: [page1Flex]
-      }, {
-        headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
-      });
-      console.log(`✅ 推播成功: ${userId}`);
-    } catch (err) {
-      console.error(`❌ 推播失敗: ${userId}`);
-    }
+    await pushToSubscribersBothPages(userId, page1Flex, page2Flex);
     await new Promise(r => setTimeout(r, 500));
   }
   
   console.log(`✅ 每日發布任務完成\n`);
+}
+
+async function replyBothFlexMessages(replyToken, page1, page2) {
+  try {
+    await axios.post('https://api.line.me/v2/bot/message/reply', {
+      replyToken: replyToken,
+      messages: [page1, page2]
+    }, {
+      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
+    });
+    console.log('✅ 兩張 Flex Message 回復成功');
+  } catch (err) {
+    console.error('❌ Flex Message 回復失敗:', err.response?.data || err.message);
+  }
 }
 
 async function replyFlexMessage(replyToken, flexMessage) {
@@ -494,7 +566,6 @@ async function replyFlexMessage(replyToken, flexMessage) {
     console.log('✅ Flex Message 回復成功');
   } catch (err) {
     console.error('❌ Flex Message 回復失敗:', err.response?.data || err.message);
-    await replyTextMessage(replyToken, "暫時無法顯示卡片，請稍後再試。");
   }
 }
 
@@ -533,12 +604,9 @@ app.post('/webhook', async (req, res) => {
           saveSubscribers();
           console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
           
-          // 發送兩頁訊息
           const page1 = await generatePage1Flex();
           const page2 = await generatePage2Flex();
-          await replyFlexMessage(replyToken, page1);
-          await new Promise(r => setTimeout(r, 500));
-          await replyFlexMessage(replyToken, page2);
+          await replyBothFlexMessages(replyToken, page1, page2);
         }
         continue;
       }
@@ -595,7 +663,6 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 預設顯示第一頁
         const page1 = await generatePage1Flex();
         await replyFlexMessage(replyToken, page1);
       }
@@ -615,6 +682,13 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
+// 健康檢查端點（用於喚醒服務）
+// ==========================================
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
+// ==========================================
 // 每日排程（台灣時間 7:00 = UTC 23:00）
 // ==========================================
 schedule.scheduleJob('0 23 * * *', () => {
@@ -631,8 +705,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 ========================================`);
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
-  console.log(`📐 室內濕度推算：工研院終極公式 RH_in = 0.82×RH_out - 0.34×ΔT - 16`);
+  console.log(`📐 室內濕度推算：終極公式 RH_in = 0.82×RH_out - 0.34×ΔT - 16`);
   console.log(`📡 天氣來源：中央氣象署 F-D0047-089 預報 API`);
+  console.log(`💾 歷史濕度儲存：humidity_history.json`);
   console.log(`📅 每日推播：上午 7:00 (台灣時間)`);
   console.log(`🎨 訊息格式：2頁 Flex Message (卡片式)`);
   console.log(`📊 六都：${CITIES.map(c => c.displayName).join('、')}`);
