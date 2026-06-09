@@ -497,7 +497,7 @@ schedule.scheduleJob('0 1 * * *', () => {
   dailyPublishTask();
 });
 
-console.log('📅 已設定每日發布排程：每天早上 8:00');
+console.log('📅 已設定每日發布排程：每天早上 9:00');
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
@@ -505,6 +505,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}`);
   console.log(`📖 科學依據：Denda et al. (2002)、PMC (2019) 等`);
-  console.log(`📅 每日推播時間：上午 8:00`);
+  console.log(`📅 每日推播時間：上午 9:00`);
   console.log(`========================================\n`);
 });
