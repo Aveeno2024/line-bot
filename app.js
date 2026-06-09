@@ -364,14 +364,26 @@ function generateFlexMessage(city, weather, index) {
 // ==========================================
 // 產生全台摘要 Flex Message
 // ==========================================
+// ==========================================
+// 產生全台摘要 Flex Message（修正版）
+// ==========================================
 async function generateTaiwanSummaryFlex() {
   const results = [];
+  
+  console.log('📊 開始收集全台數據...');
   
   for (const city of CITIES) {
     const weather = await getWeather(city);
     const index = calculateIndex(weather);
+    
+    // 詳細記錄每個城市的數據
+    console.log(`${city.displayName}: 室外濕度=${weather.humidity}%, 室內濕度=${index.indoorHumidity}%, 衝擊差=${index.shockValue}%`);
+    
     results.push({
       city: city.displayName,
+      temp: weather.temp,
+      outdoorHumidity: weather.humidity,
+      indoorHumidity: index.indoorHumidity,
       shockValue: index.shockValue,
       shockLevel: index.shockLevel,
       shockColor: index.shockColor
@@ -382,39 +394,65 @@ async function generateTaiwanSummaryFlex() {
   const date = new Date();
   const dateStr = `${date.getMonth()+1}/${date.getDate()}`;
   
-  // 分類城市
-  const danger = results.filter(r => r.shockValue >= 30);
-  const high = results.filter(r => r.shockValue >= 20 && r.shockValue < 30);
-  const medium = results.filter(r => r.shockValue >= 10 && r.shockValue < 20);
-  const low = results.filter(r => r.shockValue < 10);
+  // 正確分類（根據衝擊差值）
+  const danger = results.filter(r => r.shockValue >= 30);      // 危險 ≥30%
+  const high = results.filter(r => r.shockValue >= 20 && r.shockValue < 30);   // 高 20-29%
+  const medium = results.filter(r => r.shockValue >= 10 && r.shockValue < 20); // 中 10-19%
+  const low = results.filter(r => r.shockValue < 10);         // 低 <10%
+  
+  console.log(`📊 分類結果: 危險=${danger.length}, 高=${high.length}, 中=${medium.length}, 低=${low.length}`);
   
   const cityListContents = [];
   
+  // 危險衝擊
   if (danger.length > 0) {
     cityListContents.push(
       { type: "text", text: "🔴 危險衝擊 (≥30%)", weight: "bold", size: "sm", color: "#FF0000", margin: "md" },
       { type: "text", text: danger.map(c => c.city).join("、"), size: "xs", color: "#666666", wrap: true }
     );
+  } else {
+    cityListContents.push(
+      { type: "text", text: "🔴 危險衝擊 (≥30%)", weight: "bold", size: "sm", color: "#FF0000", margin: "md" },
+      { type: "text", text: "無", size: "xs", color: "#666666" }
+    );
   }
   
+  // 高衝擊
   if (high.length > 0) {
     cityListContents.push(
       { type: "text", text: "🟠 高衝擊 (20-29%)", weight: "bold", size: "sm", color: "#FF6600", margin: "md" },
       { type: "text", text: high.map(c => c.city).join("、"), size: "xs", color: "#666666", wrap: true }
     );
+  } else {
+    cityListContents.push(
+      { type: "text", text: "🟠 高衝擊 (20-29%)", weight: "bold", size: "sm", color: "#FF6600", margin: "md" },
+      { type: "text", text: "無", size: "xs", color: "#666666" }
+    );
   }
   
+  // 中衝擊
   if (medium.length > 0) {
     cityListContents.push(
       { type: "text", text: "🟡 中衝擊 (10-19%)", weight: "bold", size: "sm", color: "#FFCC00", margin: "md" },
       { type: "text", text: medium.map(c => c.city).join("、"), size: "xs", color: "#666666", wrap: true }
     );
+  } else {
+    cityListContents.push(
+      { type: "text", text: "🟡 中衝擊 (10-19%)", weight: "bold", size: "sm", color: "#FFCC00", margin: "md" },
+      { type: "text", text: "無", size: "xs", color: "#666666" }
+    );
   }
   
+  // 低衝擊
   if (low.length > 0) {
     cityListContents.push(
       { type: "text", text: "🟢 低衝擊 (<10%)", weight: "bold", size: "sm", color: "#00CC00", margin: "md" },
       { type: "text", text: low.map(c => c.city).join("、"), size: "xs", color: "#666666", wrap: true }
+    );
+  } else {
+    cityListContents.push(
+      { type: "text", text: "🟢 低衝擊 (<10%)", weight: "bold", size: "sm", color: "#00CC00", margin: "md" },
+      { type: "text", text: "無", size: "xs", color: "#666666" }
     );
   }
   
@@ -459,6 +497,14 @@ async function generateTaiwanSummaryFlex() {
               { type: "text", text: `${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}`, size: "xs", color: "#666666", align: "end" }
             ]
           },
+          {
+            type: "box",
+            layout: "horizontal",
+            contents: [
+              { type: "text", text: "📖 科學依據", size: "xs", color: "#999999" },
+              { type: "text", text: "Denda et al. 2002", size: "xs", color: "#666666", align: "end" }
+            ]
+          },
           { type: "separator", margin: "md" },
           ...cityListContents,
           { type: "separator", margin: "md" },
@@ -483,7 +529,7 @@ async function generateTaiwanSummaryFlex() {
             type: "box",
             layout: "horizontal",
             contents: [
-              { type: "text", text: "📊 中央氣象署", size: "xxs", color: "#999999" },
+              { type: "text", text: "📊 資料來源：中央氣象署", size: "xxs", color: "#999999" },
               { type: "text", text: "依據 Denda et al. 2002", size: "xxs", color: "#999999", align: "end" }
             ]
           }
