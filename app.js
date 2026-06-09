@@ -8,8 +8,8 @@ app.use(express.json());
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
-const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf98WzgO2eAvPXBSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9y6QgmS/F+EPNDkUgO2YsRBdpKhRv5J3Eh0PIfF6kt4QwdB04t89/1O/w1cDnyilFU=';
-const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
+const CHANNEL_ACCESS_TOKEN = '你的 LINE 頻道存取令牌';
+const CWA_API_KEY = '你的中央氣象署 API 金鑰';
 // ==========================================
 
 // 室內環境設定
@@ -22,7 +22,7 @@ const THRESHOLDS = {
   SHOCK: { LOW: 10, MEDIUM: 20, HIGH: 30 }
 };
 
-// 城市列表
+// 完整城市列表（18個縣市）
 const CITIES = [
   { code: "1", name: "臺北市", displayName: "臺北市", stationName: "臺北" },
   { code: "2", name: "新北市", displayName: "新北市", stationName: "板橋" },
@@ -44,7 +44,7 @@ const CITIES = [
   { code: "I", name: "澎湖縣", displayName: "澎湖縣", stationName: "澎湖" }
 ];
 
-// 類比資料
+// 類比資料（API 失敗時備用）
 const MOCK_WEATHER = {
   "臺北市": { temp: 32, humidity: 58 },
   "新北市": { temp: 31, humidity: 60 },
@@ -200,9 +200,9 @@ function calculateIndex(weather) {
 }
 
 // ==========================================
-// 產生 Flex Message
+// 產生單一城市 Flex Message
 // ==========================================
-function generateFlexMessage(city, weather, index) {
+function generateCityFlexMessage(city, weather, index) {
   const date = new Date();
   const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
   
@@ -247,7 +247,6 @@ function generateFlexMessage(city, weather, index) {
         layout: "vertical",
         spacing: "md",
         contents: [
-          // 室內環境說明
           {
             type: "box",
             layout: "horizontal",
@@ -256,7 +255,6 @@ function generateFlexMessage(city, weather, index) {
               { type: "text", text: `冷氣房 ${INDOOR_TEMP}℃`, size: "sm", color: "#666666", align: "end" }
             ]
           },
-          // 室外環境
           {
             type: "box",
             layout: "horizontal",
@@ -266,7 +264,6 @@ function generateFlexMessage(city, weather, index) {
             ]
           },
           { type: "separator", margin: "md" },
-          // 皮膚乾燥指數標題
           {
             type: "box",
             layout: "horizontal",
@@ -275,7 +272,6 @@ function generateFlexMessage(city, weather, index) {
               { type: "text", text: `${index.drynessScore}分`, weight: "bold", size: "lg", color: index.drynessColor, align: "end" }
             ]
           },
-          // 乾燥指數燈號
           {
             type: "box",
             layout: "horizontal",
@@ -292,7 +288,6 @@ function generateFlexMessage(city, weather, index) {
               }
             ]
           },
-          // 乾燥指數建議
           {
             type: "box",
             layout: "vertical",
@@ -302,7 +297,6 @@ function generateFlexMessage(city, weather, index) {
             ]
           },
           { type: "separator", margin: "md" },
-          // 濕度衝擊指數標題
           {
             type: "box",
             layout: "horizontal",
@@ -311,7 +305,6 @@ function generateFlexMessage(city, weather, index) {
               { type: "text", text: `${index.shockValue}%`, weight: "bold", size: "lg", color: index.shockColor, align: "end" }
             ]
           },
-          // 衝擊指數燈號
           {
             type: "box",
             layout: "horizontal",
@@ -328,7 +321,6 @@ function generateFlexMessage(city, weather, index) {
               }
             ]
           },
-          // 衝擊指數建議
           {
             type: "box",
             layout: "vertical",
@@ -362,10 +354,7 @@ function generateFlexMessage(city, weather, index) {
 }
 
 // ==========================================
-// 產生全台摘要 Flex Message
-// ==========================================
-// ==========================================
-// 產生全台摘要 Flex Message（修正版）
+// 產生全台摘要 Flex Message（含完整城市列表）
 // ==========================================
 async function generateTaiwanSummaryFlex() {
   const results = [];
@@ -376,14 +365,8 @@ async function generateTaiwanSummaryFlex() {
     const weather = await getWeather(city);
     const index = calculateIndex(weather);
     
-    // 詳細記錄每個城市的數據
-    console.log(`${city.displayName}: 室外濕度=${weather.humidity}%, 室內濕度=${index.indoorHumidity}%, 衝擊差=${index.shockValue}%`);
-    
     results.push({
       city: city.displayName,
-      temp: weather.temp,
-      outdoorHumidity: weather.humidity,
-      indoorHumidity: index.indoorHumidity,
       shockValue: index.shockValue,
       shockLevel: index.shockLevel,
       shockColor: index.shockColor
@@ -394,17 +377,13 @@ async function generateTaiwanSummaryFlex() {
   const date = new Date();
   const dateStr = `${date.getMonth()+1}/${date.getDate()}`;
   
-  // 正確分類（根據衝擊差值）
-  const danger = results.filter(r => r.shockValue >= 30);      // 危險 ≥30%
-  const high = results.filter(r => r.shockValue >= 20 && r.shockValue < 30);   // 高 20-29%
-  const medium = results.filter(r => r.shockValue >= 10 && r.shockValue < 20); // 中 10-19%
-  const low = results.filter(r => r.shockValue < 10);         // 低 <10%
-  
-  console.log(`📊 分類結果: 危險=${danger.length}, 高=${high.length}, 中=${medium.length}, 低=${low.length}`);
+  const danger = results.filter(r => r.shockValue >= 30);
+  const high = results.filter(r => r.shockValue >= 20 && r.shockValue < 30);
+  const medium = results.filter(r => r.shockValue >= 10 && r.shockValue < 20);
+  const low = results.filter(r => r.shockValue < 10);
   
   const cityListContents = [];
   
-  // 危險衝擊
   if (danger.length > 0) {
     cityListContents.push(
       { type: "text", text: "🔴 危險衝擊 (≥30%)", weight: "bold", size: "sm", color: "#FF0000", margin: "md" },
@@ -417,7 +396,6 @@ async function generateTaiwanSummaryFlex() {
     );
   }
   
-  // 高衝擊
   if (high.length > 0) {
     cityListContents.push(
       { type: "text", text: "🟠 高衝擊 (20-29%)", weight: "bold", size: "sm", color: "#FF6600", margin: "md" },
@@ -430,7 +408,6 @@ async function generateTaiwanSummaryFlex() {
     );
   }
   
-  // 中衝擊
   if (medium.length > 0) {
     cityListContents.push(
       { type: "text", text: "🟡 中衝擊 (10-19%)", weight: "bold", size: "sm", color: "#FFCC00", margin: "md" },
@@ -443,7 +420,6 @@ async function generateTaiwanSummaryFlex() {
     );
   }
   
-  // 低衝擊
   if (low.length > 0) {
     cityListContents.push(
       { type: "text", text: "🟢 低衝擊 (<10%)", weight: "bold", size: "sm", color: "#00CC00", margin: "md" },
@@ -513,7 +489,20 @@ async function generateTaiwanSummaryFlex() {
             layout: "vertical",
             contents: [
               { type: "text", text: "💡 查詢詳細指數", size: "xs", color: "#999999" },
-              { type: "text", text: "輸入城市代碼 (1=臺北市, 2=新北市...)", size: "xxs", color: "#AAAAAA", wrap: true }
+              { type: "text", text: "輸入代碼查詢：", size: "xxs", color: "#AAAAAA" },
+              { type: "text", text: "1臺北 2新北 3基隆 4宜蘭 5花蓮 6臺東", size: "xxs", color: "#AAAAAA" },
+              { type: "text", text: "7屏東 8高雄 9臺南 A雲林 B嘉義 C彰化", size: "xxs", color: "#AAAAAA" },
+              { type: "text", text: "D臺中 E南投 F苗栗 G桃園 H金門 I澎湖", size: "xxs", color: "#AAAAAA" }
+            ]
+          },
+          {
+            type: "box",
+            layout: "vertical",
+            margin: "md",
+            contents: [
+              { type: "text", text: "🔔 訂閱每日提醒", size: "xs", color: "#999999" },
+              { type: "text", text: "輸入「加入訂閱」開啟，每天09:00收到", size: "xxs", color: "#AAAAAA" },
+              { type: "text", text: "輸入「取消訂閱」關閉", size: "xxs", color: "#AAAAAA" }
             ]
           }
         ],
@@ -541,7 +530,7 @@ async function generateTaiwanSummaryFlex() {
 }
 
 // ==========================================
-// 發送 Flex Message
+// 發送訊息函式
 // ==========================================
 async function pushToSubscribersFlex(message) {
   if (subscribers.length === 0) {
@@ -576,139 +565,6 @@ async function dailyPublishTask() {
   console.log(`✅ 每日發布任務完成\n`);
 }
 
-// ==========================================
-// LINE Webhook
-// ==========================================
-app.post('/webhook', async (req, res) => {
-  console.log('📨 收到 Webhook');
-  res.status(200).send('OK');
-  
-  try {
-    const events = req.body.events;
-    if (!events) return;
-    
-    for (const event of events) {
-      const replyToken = event.replyToken;
-      
-      if (event.type === 'follow') {
-        const userId = event.source.userId;
-        if (!subscribers.includes(userId)) {
-          subscribers.push(userId);
-          saveSubscribers();
-          console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
-          await replyFlexMessage(replyToken, {
-            type: "flex",
-            altText: "歡迎加入皮膚濕度衝擊指數",
-            contents: {
-              type: "bubble",
-              header: {
-                type: "box",
-                layout: "vertical",
-                contents: [
-                  { type: "text", text: "🎉 歡迎加入", weight: "bold", size: "xl", color: "#ffffff" }
-                ],
-                backgroundColor: "#667eea",
-                paddingAll: "20px"
-              },
-              body: {
-                type: "box",
-                layout: "vertical",
-                spacing: "md",
-                contents: [
-                  { type: "text", text: "已為您自動開啟每日提醒", weight: "bold", size: "md" },
-                  { type: "text", text: "每天上午 9:00 收到全台指數摘要", size: "sm", color: "#666666" },
-                  { type: "separator", margin: "md" },
-                  { type: "text", text: "📱 查詢方式", weight: "bold", size: "sm" },
-                  { type: "text", text: "• 輸入城市代碼（1=臺北市）", size: "xs", color: "#666666" },
-                  { type: "text", text: "• 輸入「全台」查詢今日摘要", size: "xs", color: "#666666" },
-                  { type: "separator", margin: "md" },
-                  { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
-                  { type: "text", text: "• 輸入「加入訂閱」開啟", size: "xs", color: "#666666" },
-                  { type: "text", text: "• 輸入「取消訂閱」關閉", size: "xs", color: "#666666" }
-                ],
-                paddingAll: "20px"
-              }
-            }
-          });
-        }
-        continue;
-      }
-      
-      if (event.type === 'unfollow') {
-        const userId = event.source.userId;
-        const index = subscribers.indexOf(userId);
-        if (index !== -1) {
-          subscribers.splice(index, 1);
-          saveSubscribers();
-          console.log(`❌ 用戶封鎖並取消訂閱: ${userId}`);
-        }
-        continue;
-      }
-      
-      if (event.type === 'message' && event.message.type === 'text') {
-        const input = event.message.text.trim();
-        const userId = event.source.userId;
-        
-        if (input === '取消訂閱') {
-          const idx = subscribers.indexOf(userId);
-          if (idx !== -1) {
-            subscribers.splice(idx, 1);
-            saveSubscribers();
-            await replyTextMessage(replyToken, '✅ 已取消每日提醒！如需重新開啟，請輸入「加入訂閱」');
-          } else {
-            await replyTextMessage(replyToken, 'ℹ️ 您尚未訂閱每日提醒，無需取消。');
-          }
-          continue;
-        }
-        
-        if (input === '加入訂閱') {
-          if (!subscribers.includes(userId)) {
-            subscribers.push(userId);
-            saveSubscribers();
-            await replyTextMessage(replyToken, '✅ 訂閱成功！每天上午 9:00 會收到全台指數摘要。');
-          } else {
-            await replyTextMessage(replyToken, 'ℹ️ 您已經是訂閱用戶囉！');
-          }
-          continue;
-        }
-        
-        if (input === '全台' || input === 'ALL') {
-          const summaryFlex = await generateTaiwanSummaryFlex();
-          await replyFlexMessage(replyToken, summaryFlex);
-          continue;
-        }
-        
-        const upperInput = input.toUpperCase();
-        const city = CITIES.find(c => c.code === upperInput);
-        
-        if (city) {
-          const weather = await getWeather(city);
-          const index = calculateIndex(weather);
-          const flexMessage = generateFlexMessage(city, weather, index);
-          await replyFlexMessage(replyToken, flexMessage);
-        } else {
-          await replyTextMessage(replyToken, `📱 請輸入城市代碼查詢：
-
-1=臺北市  2=新北市  3=基隆市
-4=宜蘭縣  5=花蓮縣  6=臺東縣
-7=屏東縣  8=高雄市  9=臺南市
-A=雲林縣  B=嘉義縣  C=彰化縣
-D=臺中市  E=南投縣  F=苗栗縣
-G=桃園市  H=金門縣  I=澎湖縣
-
-輸入「全台」查詢今日摘要
-輸入「加入訂閱」開啟每日提醒`);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('處理錯誤:', err);
-  }
-});
-
-// ==========================================
-// 發送 Flex Message
-// ==========================================
 async function replyFlexMessage(replyToken, flexMessage) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/reply', {
@@ -743,10 +599,186 @@ async function replyTextMessage(replyToken, text) {
   }
 }
 
+// ==========================================
+// LINE Webhook
+// ==========================================
+app.post('/webhook', async (req, res) => {
+  console.log('📨 收到 Webhook');
+  res.status(200).send('OK');
+  
+  try {
+    const events = req.body.events;
+    if (!events) return;
+    
+    for (const event of events) {
+      const replyToken = event.replyToken;
+      
+      // 用戶加入好友（自動訂閱）
+      if (event.type === 'follow') {
+        const userId = event.source.userId;
+        if (!subscribers.includes(userId)) {
+          subscribers.push(userId);
+          saveSubscribers();
+          console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
+          await replyFlexMessage(replyToken, {
+            type: "flex",
+            altText: "歡迎加入皮膚濕度衝擊指數",
+            contents: {
+              type: "bubble",
+              header: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  { type: "text", text: "🎉 歡迎加入", weight: "bold", size: "xl", color: "#ffffff" }
+                ],
+                backgroundColor: "#667eea",
+                paddingAll: "20px"
+              },
+              body: {
+                type: "box",
+                layout: "vertical",
+                spacing: "md",
+                contents: [
+                  { type: "text", text: "已為您自動開啟每日提醒", weight: "bold", size: "md" },
+                  { type: "text", text: "每天上午 9:00 收到全台指數摘要", size: "sm", color: "#666666" },
+                  { type: "separator", margin: "md" },
+                  { type: "text", text: "📱 查詢方式", weight: "bold", size: "sm" },
+                  { type: "text", text: "輸入代碼查詢：1臺北 2新北 3基隆...", size: "xs", color: "#666666" },
+                  { type: "text", text: "輸入「全台」查詢今日摘要", size: "xs", color: "#666666" },
+                  { type: "separator", margin: "md" },
+                  { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
+                  { type: "text", text: "輸入「加入訂閱」開啟", size: "xs", color: "#666666" },
+                  { type: "text", text: "輸入「取消訂閱」關閉", size: "xs", color: "#666666" }
+                ],
+                paddingAll: "20px"
+              }
+            }
+          });
+        }
+        continue;
+      }
+      
+      // 用戶封鎖 Bot
+      if (event.type === 'unfollow') {
+        const userId = event.source.userId;
+        const index = subscribers.indexOf(userId);
+        if (index !== -1) {
+          subscribers.splice(index, 1);
+          saveSubscribers();
+          console.log(`❌ 用戶封鎖並取消訂閱: ${userId}`);
+        }
+        continue;
+      }
+      
+      // 處理文字訊息
+      if (event.type === 'message' && event.message.type === 'text') {
+        const input = event.message.text.trim();
+        const userId = event.source.userId;
+        
+        console.log(`📱 用戶 ${userId} 輸入: "${input}"`);
+        
+        // 取消訂閱
+        if (input === '取消訂閱') {
+          const idx = subscribers.indexOf(userId);
+          if (idx !== -1) {
+            subscribers.splice(idx, 1);
+            saveSubscribers();
+            await replyTextMessage(replyToken, '✅ 已取消每日提醒！如需重新開啟，請輸入「加入訂閱」');
+          } else {
+            await replyTextMessage(replyToken, 'ℹ️ 您尚未訂閱每日提醒，無需取消。');
+          }
+          continue;
+        }
+        
+        // 加入訂閱
+        if (input === '加入訂閱') {
+          if (!subscribers.includes(userId)) {
+            subscribers.push(userId);
+            saveSubscribers();
+            await replyTextMessage(replyToken, '✅ 訂閱成功！每天上午 9:00 會收到全台指數摘要。');
+          } else {
+            await replyTextMessage(replyToken, 'ℹ️ 您已經是訂閱用戶囉！');
+          }
+          continue;
+        }
+        
+        // 全台摘要
+        if (input === '全台' || input === 'ALL') {
+          const summaryFlex = await generateTaiwanSummaryFlex();
+          await replyFlexMessage(replyToken, summaryFlex);
+          continue;
+        }
+        
+        // 城市查詢（支援數字和大寫字母）
+        const upperInput = input.toUpperCase();
+        const city = CITIES.find(c => c.code === upperInput);
+        
+        console.log(`🔍 比對: 輸入=${upperInput}, 找到=${city ? city.displayName : '無'}`);
+        
+        if (city) {
+          const weather = await getWeather(city);
+          const index = calculateIndex(weather);
+          const flexMessage = generateCityFlexMessage(city, weather, index);
+          await replyFlexMessage(replyToken, flexMessage);
+        } else {
+          // 無效輸入，顯示完整幫助訊息
+          const helpMessage = {
+            type: "flex",
+            altText: "查詢幫助",
+            contents: {
+              type: "bubble",
+              header: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  { type: "text", text: "📱 查詢幫助", weight: "bold", size: "xl", color: "#ffffff" }
+                ],
+                backgroundColor: "#667eea",
+                paddingAll: "20px"
+              },
+              body: {
+                type: "box",
+                layout: "vertical",
+                spacing: "md",
+                contents: [
+                  { type: "text", text: "🔍 查詢方式", weight: "bold", size: "md" },
+                  { type: "text", text: "輸入城市代碼即可查詢", size: "sm", color: "#666666" },
+                  { type: "separator", margin: "md" },
+                  { type: "text", text: "📊 代碼對照表", weight: "bold", size: "sm" },
+                  { type: "text", text: "1臺北 2新北 3基隆 4宜蘭 5花蓮 6臺東", size: "xs", color: "#666666" },
+                  { type: "text", text: "7屏東 8高雄 9臺南 A雲林 B嘉義 C彰化", size: "xs", color: "#666666" },
+                  { type: "text", text: "D臺中 E南投 F苗栗 G桃園 H金門 I澎湖", size: "xs", color: "#666666" },
+                  { type: "separator", margin: "md" },
+                  { type: "text", text: "📊 其他指令", weight: "bold", size: "sm" },
+                  { type: "text", text: "輸入「全台」查詢今日摘要", size: "xs", color: "#666666" },
+                  { type: "text", text: "輸入「加入訂閱」開啟每日提醒", size: "xs", color: "#666666" },
+                  { type: "text", text: "輸入「取消訂閱」關閉提醒", size: "xs", color: "#666666" }
+                ],
+                paddingAll: "20px"
+              },
+              footer: {
+                type: "box",
+                layout: "vertical",
+                contents: [
+                  { type: "text", text: "📖 依據 Denda et al. 2002", size: "xxs", color: "#999999", align: "center" }
+                ],
+                paddingAll: "12px"
+              }
+            }
+          };
+          await replyFlexMessage(replyToken, helpMessage);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('處理錯誤:', err);
+  }
+});
+
 app.get('/', (req, res) => {
   res.json({ 
     status: 'ok', 
-    message: '皮膚濕度衝擊指數 Bot 運行中 (Flex Message)',
+    message: '皮膚濕度衝擊指數 Bot 運行中',
     indoorTemp: INDOOR_TEMP,
     indoorHumRatio: INDOOR_HUM_RATIO,
     subscribers: subscribers.length
@@ -754,11 +786,11 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 設定每日排程（台灣時間早上 9:00 發布）
+// 設定每日排程（台灣時間早上 9:00）
 // ==========================================
 schedule.scheduleJob('* * * * *', () => {
   const now = new Date();
-  console.log(`📅 執行每日推播 - 伺服器時間: ${now.toLocaleString()}`);
+  console.log(`📅 執行每日推播 - UTC: ${now.toUTCString()}`);
   dailyPublishTask();
 });
 
@@ -769,8 +801,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 ========================================`);
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃ / 濕度 = 室外 × ${INDOOR_HUM_RATIO}`);
-  console.log(`📖 科學依據：Denda et al. (2002)、PMC (2019) 等`);
+  console.log(`📖 科學依據：Denda et al. (2002)`);
   console.log(`📅 每日推播時間：上午 9:00 (台灣時間)`);
   console.log(`🎨 訊息格式：Flex Message (卡片式)`);
-  console.log(`========================================\n`);
-});
+  console.log(`========================================\n
