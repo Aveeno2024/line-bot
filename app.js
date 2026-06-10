@@ -441,35 +441,35 @@ async function generatePage2Flex() {
         spacing: "md",
         contents: [
           // 1. 燈號意義
-          { type: "text", text: "🚦 燈號意義", weight: "bold", size: "sm" },
-          { type: "text", text: "🟢 低衝擊", weight: "bold", size: "xs", color: "#00CC00" },
-          { type: "text", text: "   濕度穩定且介於理想範圍，皮膚屏障無顯著壓力", size: "xs", color: "#666666", margin: "xs" },
-          { type: "text", text: "🟡 中衝擊", weight: "bold", size: "xs", color: "#FFCC00", margin: "xs" },
-          { type: "text", text: "   濕度變化 15-30% 或室內濕度 <45% / ≥75%", size: "xs", color: "#666666" },
-          { type: "text", text: "🟠 高衝擊", weight: "bold", size: "xs", color: "#FF6600", margin: "xs" },
-          { type: "text", text: "   濕度變化 30-50% 且室內濕度 <45%", size: "xs", color: "#666666" },
-          { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "xs", color: "#FF0000", margin: "xs" },
-          { type: "text", text: "   濕度變化 ≥50% 且室內濕度 <40% 或室內濕度 ≥85%", size: "xs", color: "#666666" },
+          { type: "text", text: "🚦 燈號意義", weight: "bold", size: "lg" },
+          { type: "text", text: "🟢 低衝擊", weight: "bold", size: "md", color: "#00CC00" },
+          { type: "text", text: "   濕度穩定且介於理想範圍，皮膚屏障無顯著壓力", size: "md", color: "#666666", margin: "xs" },
+          { type: "text", text: "🟡 中衝擊", weight: "bold", size: "md", color: "#FFCC00", margin: "xs" },
+          { type: "text", text: "   濕度變化 15-30% 或室內濕度 <45% / ≥75%", size: "md", color: "#666666" },
+          { type: "text", text: "🟠 高衝擊", weight: "bold", size: "md", color: "#FF6600", margin: "xs" },
+          { type: "text", text: "   濕度變化 30-50% 且室內濕度 <45%", size: "md", color: "#666666" },
+          { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "md", color: "#FF0000", margin: "xs" },
+          { type: "text", text: "   濕度變化 ≥50% 且室內濕度 <40% 或室內濕度 ≥85%", size: "md", color: "#666666" },
           { type: "separator", margin: "md" },
           
           // 2. 保健建議
-          { type: "text", text: "💡 保健建議", weight: "bold", size: "sm" },
-          { type: "text", text: "🟢 低衝擊：維持日常基礎保養", size: "xs", color: "#666666" },
-          { type: "text", text: "🟡 中衝擊：乾燥型加強保濕／潮濕型開啟除濕", size: "xs", color: "#666666" },
-          { type: "text", text: "🟠 高衝擊：減少戶外停留，主動調整室內濕度", size: "xs", color: "#666666" },
-          { type: "text", text: "🔴 危險衝擊：避免外出，立即調整環境", size: "xs", color: "#666666" },
+          { type: "text", text: "💡 保健建議", weight: "bold", size: "lg" },
+          { type: "text", text: "🟢 低衝擊：維持日常基礎保養", size: "md", color: "#666666" },
+          { type: "text", text: "🟡 中衝擊：乾燥型加強保濕／潮濕型開啟除濕", size: "md", color: "#666666" },
+          { type: "text", text: "🟠 高衝擊：減少戶外停留，主動調整室內濕度", size: "md", color: "#666666" },
+          { type: "text", text: "🔴 危險衝擊：避免外出，立即調整環境", size: "md", color: "#666666" },
           { type: "separator", margin: "md" },
           
           // 3. 查詢指令
-          { type: "text", text: "🔍 查詢指令", weight: "bold", size: "sm" },
-          { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "xs", color: "#666666" },
-          { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "xs", color: "#666666" },
+          { type: "text", text: "🔍 查詢指令", weight: "bold", size: "lg" },
+          { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "md", color: "#666666" },
+          { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "md", color: "#666666" },
           { type: "separator", margin: "md" },
           
           // 4. 訂閱管理
-          { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
-          { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "xs", color: "#666666" },
-          { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" }
+          { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "lg" },
+          { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "md", color: "#666666" },
+          { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "md", color: "#666666" }
         ],
         paddingAll: "20px"
       },
@@ -478,9 +478,9 @@ async function generatePage2Flex() {
         layout: "vertical",
         contents: [
           { type: "separator" },
-          { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式 R²≈0.85", size: "xxs", color: "#999999", align: "center" },
-          { type: "text", text: "📖 科學依據：Denda et al. (2002)、PMC (2019) 等", size: "xxs", color: "#999999", align: "center" },
-          { type: "text", text: "💡 輸入「全台」開始查詢", size: "xxs", color: "#999999", align: "center" }
+          { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式 R²≈0.85", size: "sm", color: "#999999", align: "center" },
+          { type: "text", text: "📖 科學依據：Denda et al. (2002)、PMC (2019) 等", size: "sm", color: "#999999", align: "center" },
+          { type: "text", text: "💡 輸入「全台」開始查詢", size: "sm", color: "#999999", align: "center" }
         ],
         paddingAll: "12px"
       }
