@@ -391,9 +391,13 @@ async function generatePage1Flex() {
         contents: [
           ...tableRows,
           { type: "separator", margin: "md" },
+          // 第一行：低衝擊 + 中衝擊
           { type: "box", layout: "horizontal", contents: [
             { type: "text", text: "🟢 低衝擊", size: "sm", color: "#00CC00", flex: 1, align: "center" },
-            { type: "text", text: "🟡 中衝擊", size: "sm", color: "#FFCC00", flex: 1, align: "center" },
+            { type: "text", text: "🟡 中衝擊", size: "sm", color: "#FFCC00", flex: 1, align: "center" }
+          ]},
+          // 第二行：高衝擊 + 危險衝擊
+          { type: "box", layout: "horizontal", contents: [
             { type: "text", text: "🟠 高衝擊", size: "sm", color: "#FF6600", flex: 1, align: "center" },
             { type: "text", text: "🔴 危險衝擊", size: "sm", color: "#FF0000", flex: 1, align: "center" }
           ]}
