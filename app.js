@@ -285,35 +285,98 @@ async function generatePage1Flex() {
   };
 }
 
+// ==========================================
+// 第二頁：完整使用說明與保健建議
+// ==========================================
 async function generatePage2Flex() {
   return {
-    type: "flex", altText: "皮膚保健建議",
+    type: "flex",
+    altText: "皮膚保健建議與使用說明",
     contents: {
-      type: "bubble", size: "mega",
-      header: { type: "box", layout: "vertical", contents: [
-        { type: "text", text: "📋 使用說明與保健建議", weight: "bold", size: "xl", color: "#ffffff" }
-      ], backgroundColor: "#667eea", paddingAll: "20px" },
-      body: { type: "box", layout: "vertical", spacing: "md", contents: [
-        { type: "text", text: "🔍 查詢指令", weight: "bold", size: "sm" },
-        { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "xs", color: "#666666" },
-        { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "xs", color: "#666666" },
-        { type: "separator", margin: "md" },
-        { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
-        { type: "text", text: "• 輸入「加入訂閱」開啟每日推播", size: "xs", color: "#666666" },
-        { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" },
-        { type: "separator", margin: "md" },
-        { type: "text", text: "📖 文獻依據", weight: "bold", size: "sm" },
-        { type: "text", text: "1. Denda et al. (2002)", size: "xxs", color: "#999999" },
-        { type: "text", text: "2. 環境濕度與皮膚綜述", size: "xxs", color: "#999999" },
-        { type: "text", text: "3. PMC (2019)", size: "xxs", color: "#999999" },
-        { type: "text", text: "4. 皮膚氣候趨勢綜述 (2024)", size: "xxs", color: "#999999" }
-      ], paddingAll: "20px" },
-      footer: { type: "box", layout: "vertical", contents: [
-        { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式", size: "xxs", color: "#999999", align: "center" }
-      ], paddingAll: "12px" }
+      type: "bubble",
+      size: "mega",
+      header: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          { type: "text", text: "📋 使用說明與保健建議", weight: "bold", size: "xl", color: "#ffffff" }
+        ],
+        backgroundColor: "#667eea",
+        paddingAll: "20px"
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+        
+          // ========== 1. 燈號意義 ==========
+          { type: "text", text: "🚦 燈號意義", weight: "bold", size: "sm" },
+          { type: "text", text: "🟢 低衝擊", weight: "bold", size: "xs", color: "#00CC00" },
+          { type: "text", text: "   維持日常基礎保養，正常清潔與保濕", size: "xs", color: "#666666", margin: "xs" },
+          { type: "text", text: "🟡 中衝擊", weight: "bold", size: "xs", color: "#FFCC00", margin: "xs" },
+          { type: "text", text: "   乾燥型：提高保濕頻率，每2-3小時補擦保濕產品", size: "xs", color: "#666666" },
+          { type: "text", text: "   潮濕型：開啟除濕機，保持皮膚乾爽", size: "xs", color: "#666666" },
+          { type: "text", text: "🟠 高衝擊", weight: "bold", size: "xs", color: "#FF6600", margin: "xs" },
+          { type: "text", text: "   提前防護，減少長時間戶外停留，主動調整室內濕度", size: "xs", color: "#666666" },
+          { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "xs", color: "#FF0000", margin: "xs" },
+          { type: "text", text: "   避免非必要外出，立即調整室內環境，觀察皮膚反應", size: "xs", color: "#666666" },
+          { type: "separator", margin: "md" },
+          
+          // ========== 2. 燈號判定邏輯 ==========
+          { type: "text", text: "📊 燈號判定邏輯", weight: "bold", size: "sm" },
+          { type: "text", text: "Delta_RH = 今日濕度 - 昨日濕度（濕度變化幅度）", size: "xs", color: "#666666" },
+          { type: "text", text: "RH_in = 室內推算濕度（依據工研院終極公式）", size: "xs", color: "#666666" },
+          { type: "text", text: "路徑A（濕度衝擊）：依據 Delta_RH 與 RH_in 複合條件", size: "xs", color: "#666666" },
+          { type: "text", text: "路徑B（極端穩態壓力）：Delta_RH < 15% 且 RH_in 極端", size: "xs", color: "#666666" },
+          { type: "text", text: "最終燈號 = 取兩路徑最高等級", size: "xs", color: "#666666" },
+          { type: "separator", margin: "md" },
+          
+          // ========== 3. 室內濕度推算公式 ==========
+          { type: "text", text: "📐 室內濕度推算公式", weight: "bold", size: "sm" },
+          { type: "text", text: "溫差 ΔT ≥ 5℃（連續強制冷卻）：", size: "xs", color: "#666666" },
+          { type: "text", text: "RH_in = 0.82 × RH_out - 0.34 × ΔT - 16", size: "xs", color: "#666666" },
+          { type: "text", text: "溫差 2℃ ~ 5℃（間歇冷卻）：", size: "xs", color: "#666666" },
+          { type: "text", text: "RH_in = 0.85 × RH_out - 0.15 × ΔT - 8", size: "xs", color: "#666666" },
+          { type: "text", text: "溫差 < 2℃（雨天低溫高濕）：", size: "xs", color: "#666666" },
+          { type: "text", text: "RH_in = RH_out - 5", size: "xs", color: "#666666" },
+          { type: "separator", margin: "md" },
+         // ========== 4. 查詢指令 ==========
+          { type: "text", text: "🔍 查詢指令", weight: "bold", size: "sm" },
+          { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "xs", color: "#666666" },
+          { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "xs", color: "#666666" },
+          { type: "separator", margin: "md" },
+          
+          // ========== 5. 訂閱管理 ==========
+          { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
+          { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "xs", color: "#666666" },
+          { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" },
+          { type: "separator", margin: "md" },
+          
+   
+          // ========== 6. 文獻依據 ==========
+          { type: "text", text: "📖 文獻依據", weight: "bold", size: "sm" },
+          { type: "text", text: "1. Denda et al. (2002) — 濕度突然下降會破壞皮膚屏障恆定", size: "xxs", color: "#999999", wrap: true },
+          { type: "text", text: "2. 環境濕度與皮膚綜述 — 闡明低濕導致乾燥、粗糙", size: "xxs", color: "#999999", wrap: true },
+          { type: "text", text: "3. PMC (2019) — 高濕環境延緩脂質屏障形成", size: "xxs", color: "#999999", wrap: true },
+          { type: "text", text: "4. 皮膚氣候趨勢綜述 (2024) — 急遽濕度變化導致水分異常流失", size: "xxs", color: "#999999", wrap: true }
+        ],
+        paddingAll: "20px"
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          { type: "separator" },
+          { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式 R²≈0.85", size: "xxs", color: "#999999", align: "center" },
+          { type: "text", text: "💡 輸入「全台」開始查詢", size: "xxs", color: "#999999", align: "center" }
+        ],
+        paddingAll: "12px"
+      }
     }
   };
 }
+
 
 // ==========================================
 // 訂閱與推播
