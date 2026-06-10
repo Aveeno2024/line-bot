@@ -1,6 +1,5 @@
 const express = require('express');
 const axios = require('axios');
-const schedule = require('node-schedule');
 const fs = require('fs');
 const app = express();
 app.use(express.json());
@@ -8,7 +7,7 @@ app.use(express.json());
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
-const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf98WzgO2eAvPXBSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9y6QgmS/F+EPNDkUgO2YsRBdpKhRv5J3Eh0PIfF6kt4QwdB04t89/1O/w1cDnyilFU=';
+const CHANNEL_ACCESS_TOKEN = FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf98WzgO2eAvPXBSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9y6QgmS/F+EPNDkUgO2YsRBdpKhRv5J3Eh0PIfF6kt4QwdB04t89/1O/w1cDnyilFU=';
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
@@ -72,11 +71,9 @@ async function loadFromGitHub() {
     const content = Buffer.from(res.data.content, 'base64').toString('utf8');
     subscribers = JSON.parse(content);
     console.log(`📋 從 GitHub 載入 ${subscribers.length} 位訂閱用戶`);
-    // 同時儲存到本地
     fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(subscribers, null, 2));
   } catch(e) {
     console.log('📋 GitHub 無訂閱資料，使用本地檔案');
-    // 嘗試從本地載入
     try {
       if (fs.existsSync(SUBSCRIBERS_FILE)) {
         subscribers = JSON.parse(fs.readFileSync(SUBSCRIBERS_FILE, 'utf8'));
@@ -89,7 +86,6 @@ async function loadFromGitHub() {
 // 儲存訂閱資料（自動同步到 GitHub）
 function saveSubscribers() {
   fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(subscribers, null, 2));
-  // 非同步同步到 GitHub
   if (GITHUB_TOKEN && GITHUB_REPO) {
     syncToGitHub().catch(err => console.error('GitHub 同步錯誤:', err.message));
   }
@@ -536,6 +532,35 @@ async function replyTextMessage(replyToken, text) {
 }
 
 // ==========================================
+// 每日推播機制（每分鐘檢查，最穩定）
+// ==========================================
+let lastPublishDate = null;
+
+function checkAndPublish() {
+  const now = new Date();
+  const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const hours = taiwanTime.getUTCHours();
+  const minutes = taiwanTime.getUTCMinutes();
+  
+  // 早上 7:00 觸發（每分鐘檢查）
+  if (hours === 7 && minutes === 0) {
+    const today = taiwanTime.toISOString().split('T')[0];
+    if (lastPublishDate !== today) {
+      console.log(`📅 觸發每日推播 - ${today}`);
+      lastPublishDate = today;
+      dailyPublishTask();
+    }
+  }
+}
+
+// 每分鐘檢查一次
+setInterval(() => {
+  checkAndPublish();
+}, 60 * 1000);
+
+console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
+
+// ==========================================
 // LINE Webhook
 // ==========================================
 app.post('/webhook', async (req, res) => {
@@ -611,22 +636,16 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ==========================================
-// 健康檢查端點
+// 健康檢查端點（給 cron-job 喚醒用）
 // ==========================================
 app.get('/', (req, res) => {
   res.json({ status: 'ok', subscribers: subscribers.length, indoorTemp: INDOOR_TEMP });
 });
-app.get('/health', (req, res) => res.send('OK'));
 
-// ==========================================
-// 每日排程（台灣時間 7:00 = UTC 23:00）
-// ==========================================
-schedule.scheduleJob('0 23 * * *', () => {
-  console.log(`📅 執行每日推播 - UTC: ${new Date().toISOString()}`);
-  console.log(`📅 執行每日推播 - 台灣: ${new Date(Date.now() + 8*60*60*1000).toLocaleString()}`);
-  dailyPublishTask();
+app.get('/health', (req, res) => {
+  console.log(`💓 健康檢查 - ${new Date().toLocaleString()}`);
+  res.status(200).send('OK');
 });
-console.log('📅 每日推播：上午 7:00 (台灣時間)');
 
 // ==========================================
 // 啟動伺服器
@@ -637,7 +656,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
   console.log(`📡 預報 API：F-D0047-089`);
-  console.log(`📅 每日推播：上午 7:00 (台灣時間)`);
+  console.log(`📅 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
   console.log(`📋 訂閱用戶：${subscribers.length} 人`);
   console.log(`========================================\n`);
 });
