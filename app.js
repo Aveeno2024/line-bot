@@ -11,17 +11,37 @@ const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
-// GitHub 設定（從環境變數讀取）
+// GitHub 設定
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO;
 
 // 檔案路徑定義
 const SUBSCRIBERS_FILE = './subscribers.json';
 const HUMIDITY_HISTORY_FILE = './humidity_history.json';
+const GROUPS_FILE = './groups.json';
 
 // 全域變數
 let subscribers = [];
+let groups = [];
 let humidityHistory = {};
+
+// 限制查詢頻率（避免洗版）
+let lastQueryTime = {};
+
+// ==========================================
+// 載入群組列表
+// ==========================================
+try {
+  if (fs.existsSync(GROUPS_FILE)) {
+    const data = fs.readFileSync(GROUPS_FILE, 'utf8');
+    groups = JSON.parse(data);
+    console.log(`📋 載入 ${groups.length} 個群組`);
+  }
+} catch(e) { }
+
+function saveGroups() {
+  fs.writeFileSync(GROUPS_FILE, JSON.stringify(groups, null, 2));
+}
 
 // ==========================================
 // GitHub 同步訂閱資料
@@ -42,7 +62,7 @@ async function syncToGitHub() {
         headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
       });
       sha = fileRes.data.sha;
-    } catch(e) { /* 檔案不存在 */ }
+    } catch(e) { }
     
     await axios.put(`https://api.github.com/repos/${GITHUB_REPO}/contents/subscribers.json`, {
       message: `Update subscribers - ${new Date().toISOString()}`,
@@ -57,7 +77,6 @@ async function syncToGitHub() {
   }
 }
 
-// 從 GitHub 載入訂閱資料
 async function loadFromGitHub() {
   if (!GITHUB_TOKEN || !GITHUB_REPO) {
     console.log('⚠️ GitHub 未設定，從本地載入');
@@ -83,7 +102,6 @@ async function loadFromGitHub() {
   }
 }
 
-// 儲存訂閱資料（自動同步到 GitHub）
 function saveSubscribers() {
   fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(subscribers, null, 2));
   if (GITHUB_TOKEN && GITHUB_REPO) {
@@ -91,7 +109,6 @@ function saveSubscribers() {
   }
 }
 
-// 啟動時載入訂閱資料
 loadFromGitHub();
 
 // ==========================================
@@ -99,7 +116,6 @@ loadFromGitHub();
 // ==========================================
 const INDOOR_TEMP = 26;
 
-// 6都城市列表
 const CITIES = [
   { code: "1", name: "臺北市", displayName: "臺北市", apiName: "臺北市" },
   { code: "2", name: "新北市", displayName: "新北市", apiName: "新北市" },
@@ -140,7 +156,7 @@ async function saveTodayHumidity(cityName, humidity) {
 }
 
 // ==========================================
-// 中央氣象署預報 API（F-D0047-089）
+// 中央氣象署 API
 // ==========================================
 async function getForecastWeather(city, dateOffset = 0) {
   console.log(`🌡️ 獲取 ${city.displayName} 預報 (offset=${dateOffset})...`);
@@ -208,7 +224,6 @@ async function getForecastWeather(city, dateOffset = 0) {
   }
 }
 
-// 即時觀測 API（備用）
 async function getCurrentWeather(city) {
   console.log(`🌡️ 獲取 ${city.displayName} 即時觀測...`);
   try {
@@ -319,7 +334,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// 第一頁：Flex Message（6都預報表格）
+// Flex Message
 // ==========================================
 async function generatePage1Flex() {
   const today = getDateString(0);
@@ -382,9 +397,6 @@ async function generatePage1Flex() {
   };
 }
 
-// ==========================================
-// 第二頁：Flex Message（完整使用說明與保健建議）
-// ==========================================
 async function generatePage2Flex() {
   return {
     type: "flex",
@@ -406,7 +418,6 @@ async function generatePage2Flex() {
         layout: "vertical",
         spacing: "md",
         contents: [
-          // 1. 燈號意義
           { type: "text", text: "🚦 燈號意義", weight: "bold", size: "sm" },
           { type: "text", text: "🟢 低衝擊", weight: "bold", size: "xs", color: "#00CC00" },
           { type: "text", text: "   維持日常基礎保養，正常清潔與保濕", size: "xs", color: "#666666", margin: "xs" },
@@ -418,8 +429,6 @@ async function generatePage2Flex() {
           { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "xs", color: "#FF0000", margin: "xs" },
           { type: "text", text: "   避免非必要外出，立即調整室內環境，觀察皮膚反應", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          
-          // 2. 燈號判定邏輯
           { type: "text", text: "📊 燈號判定邏輯", weight: "bold", size: "sm" },
           { type: "text", text: "Delta_RH = 今日濕度 - 昨日濕度（濕度變化幅度）", size: "xs", color: "#666666" },
           { type: "text", text: "RH_in = 室內推算濕度（依據工研院終極公式）", size: "xs", color: "#666666" },
@@ -427,8 +436,6 @@ async function generatePage2Flex() {
           { type: "text", text: "路徑B（極端穩態壓力）：Delta_RH < 15% 且 RH_in 極端", size: "xs", color: "#666666" },
           { type: "text", text: "最終燈號 = 取兩路徑最高等級", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          
-          // 3. 室內濕度推算公式
           { type: "text", text: "📐 室內濕度推算公式", weight: "bold", size: "sm" },
           { type: "text", text: "溫差 ΔT ≥ 5℃（連續強制冷卻）：", size: "xs", color: "#666666" },
           { type: "text", text: "RH_in = 0.82 × RH_out - 0.34 × ΔT - 16", size: "xs", color: "#666666" },
@@ -437,20 +444,14 @@ async function generatePage2Flex() {
           { type: "text", text: "溫差 < 2℃（雨天低溫高濕）：", size: "xs", color: "#666666" },
           { type: "text", text: "RH_in = RH_out - 5", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          
-          // 4. 查詢指令
           { type: "text", text: "🔍 查詢指令", weight: "bold", size: "sm" },
           { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "xs", color: "#666666" },
           { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          
-          // 5. 訂閱管理
           { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
-          { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "xs", color: "#666666" },
+          { type: "text", text: "• 輸入「加入訂閱」開啟每日推播", size: "xs", color: "#666666" },
           { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          
-          // 6. 文獻依據
           { type: "text", text: "📖 文獻依據", weight: "bold", size: "sm" },
           { type: "text", text: "1. Denda et al. (2002) — 濕度突然下降會破壞皮膚屏障恆定", size: "xxs", color: "#999999", wrap: true },
           { type: "text", text: "2. 環境濕度與皮膚綜述 — 闡明低濕導致乾燥、粗糙", size: "xxs", color: "#999999", wrap: true },
@@ -474,16 +475,18 @@ async function generatePage2Flex() {
 }
 
 // ==========================================
-// 推播與回覆函數
+// 推播函數
 // ==========================================
-async function pushToSubscribersBothPages(userId, page1, page2) {
+async function pushToUser(userId, page1, page2) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1, page2] }, {
       headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
     console.log(`✅ 推播成功: ${userId}`);
+    return true;
   } catch (err) {
     console.error(`❌ 推播失敗: ${userId}`);
+    return false;
   }
 }
 
@@ -491,10 +494,14 @@ async function dailyPublishTask() {
   console.log(`\n📅 ===== 每日發布任務 ${new Date().toLocaleString()} =====`);
   const page1 = await generatePage1Flex();
   const page2 = await generatePage2Flex();
+  
+  // 只推播給個人訂閱者（不推播給群組）
+  console.log(`📤 推播給 ${subscribers.length} 位個人訂閱者`);
   for (const userId of subscribers) {
-    await pushToSubscribersBothPages(userId, page1, page2);
+    await pushToUser(userId, page1, page2);
     await new Promise(r => setTimeout(r, 500));
   }
+  
   console.log(`✅ 每日發布任務完成\n`);
 }
 
@@ -531,8 +538,22 @@ async function replyTextMessage(replyToken, text) {
   }
 }
 
+// 私訊發送（給群組中的發問者）
+async function sendPrivateMessage(userId, page1, page2) {
+  try {
+    await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1, page2] }, {
+      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
+    });
+    console.log(`✅ 私訊發送成功: ${userId}`);
+    return true;
+  } catch (err) {
+    console.error(`❌ 私訊發送失敗: ${userId}`);
+    return false;
+  }
+}
+
 // ==========================================
-// 每日推播機制（每分鐘檢查，最穩定）
+// 每日推播檢查機制
 // ==========================================
 let lastPublishDate = null;
 
@@ -542,7 +563,6 @@ function checkAndPublish() {
   const hours = taiwanTime.getUTCHours();
   const minutes = taiwanTime.getUTCMinutes();
   
-  // 早上 7:00 觸發（每分鐘檢查）
   if (hours === 7 && minutes === 0) {
     const today = taiwanTime.toISOString().split('T')[0];
     if (lastPublishDate !== today) {
@@ -553,7 +573,6 @@ function checkAndPublish() {
   }
 }
 
-// 每分鐘檢查一次
 setInterval(() => {
   checkAndPublish();
 }, 60 * 1000);
@@ -566,36 +585,69 @@ console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7
 app.post('/webhook', async (req, res) => {
   console.log('📨 收到 Webhook');
   res.status(200).send('OK');
+  
   try {
     const events = req.body.events;
     if (!events) return;
+    
     for (const event of events) {
       const replyToken = event.replyToken;
+      const sourceType = event.source?.type;
+      const sourceId = event.source?.groupId || event.source?.roomId || event.source?.userId;
+      const userId = event.source?.userId;
+      
+      console.log(`📱 來源: ${sourceType}, ID: ${sourceId}`);
+      
+      // Bot 被加入群組
+      if (event.type === 'join') {
+        const groupId = event.source?.groupId;
+        if (groupId && !groups.includes(groupId)) {
+          groups.push(groupId);
+          saveGroups();
+          console.log(`✅ Bot 加入新群組: ${groupId}`);
+          await replyTextMessage(replyToken, 
+            `🌡️💧 皮膚濕度壓力指數 Bot 已加入！
+
+📊 使用方式：
+• 輸入「全台」查詢六都3天預報
+• 輸入「詳細說明」查看完整說明
+
+💡 查詢結果會「私訊」給您，不會打擾群組成員`);
+        }
+        continue;
+      }
+      
+      // 用戶加入 Bot（個人）
       if (event.type === 'follow') {
-        const userId = event.source.userId;
         if (!subscribers.includes(userId)) {
           subscribers.push(userId);
           saveSubscribers();
+          console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
           const page1 = await generatePage1Flex();
           const page2 = await generatePage2Flex();
           await replyBothFlexMessages(replyToken, page1, page2);
         }
         continue;
       }
+      
+      // 用戶封鎖 Bot
       if (event.type === 'unfollow') {
-        const userId = event.source.userId;
         const idx = subscribers.indexOf(userId);
         if (idx !== -1) {
           subscribers.splice(idx, 1);
           saveSubscribers();
+          console.log(`❌ 用戶取消訂閱: ${userId}`);
         }
         continue;
       }
+      
+      // 處理文字訊息
       if (event.type === 'message' && event.message.type === 'text') {
         const input = event.message.text.trim();
-        const userId = event.source.userId;
-        console.log(`📱 用戶輸入: "${input}"`);
-        if (input === '取消訂閱') {
+        console.log(`📱 輸入: "${input}"`);
+        
+        // 取消訂閱（個人）
+        if (input === '取消訂閱' && sourceType === 'user') {
           const idx = subscribers.indexOf(userId);
           if (idx !== -1) {
             subscribers.splice(idx, 1);
@@ -606,7 +658,9 @@ app.post('/webhook', async (req, res) => {
           }
           continue;
         }
-        if (input === '加入訂閱') {
+        
+        // 加入訂閱（個人）
+        if (input === '加入訂閱' && sourceType === 'user') {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
             saveSubscribers();
@@ -616,18 +670,57 @@ app.post('/webhook', async (req, res) => {
           }
           continue;
         }
-        if (input === '全台' || input === 'ALL') {
-          const page1 = await generatePage1Flex();
-          await replyFlexMessage(replyToken, page1);
-          continue;
-        }
+        
+        // 詳細說明（個人或群組）
         if (input === '詳細說明') {
           const page2 = await generatePage2Flex();
           await replyFlexMessage(replyToken, page2);
           continue;
         }
+        
+        // 全台查詢
+        if (input === '全台' || input === 'ALL') {
+          const page1 = await generatePage1Flex();
+          const page2 = await generatePage2Flex();
+          
+          if (sourceType === 'user') {
+            // 個人：直接回覆
+            await replyBothFlexMessages(replyToken, page1, page2);
+          } else {
+            // 群組：私訊給發問者，群組只發提示
+            // 限制頻率：同一群組 30 秒內只能查詢一次
+            const now = Date.now();
+            const lastTime = lastQueryTime[sourceId] || 0;
+            
+            if (now - lastTime < 30000) {
+              await replyTextMessage(replyToken, '⚠️ 請稍後再查詢，30秒內只能查詢一次');
+              continue;
+            }
+            lastQueryTime[sourceId] = now;
+            
+            // 私訊給發問者
+            const privateSent = await sendPrivateMessage(userId, page1, page2);
+            
+            if (privateSent) {
+              // 在群組發送簡短提示
+              await replyTextMessage(replyToken, '📊 已將六都預報私訊給您，請查看 LINE 的「聊天」列表');
+            } else {
+              await replyTextMessage(replyToken, '⚠️ 無法發送私訊，請先加入好友並允許接收訊息');
+            }
+          }
+          continue;
+        }
+        
+        // 預設回應（個人或群組）
         const page1 = await generatePage1Flex();
-        await replyFlexMessage(replyToken, page1);
+        if (sourceType === 'user') {
+          await replyFlexMessage(replyToken, page1);
+        } else {
+          await replyTextMessage(replyToken, 
+            `📊 查詢六都皮膚濕度壓力指數\n\n` +
+            `請輸入「全台」，結果將「私訊」給您，不會打擾群組成員。\n\n` +
+            `📖 輸入「詳細說明」查看完整介紹`);
+        }
       }
     }
   } catch (err) {
@@ -636,7 +729,7 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ==========================================
-// 健康檢查端點（給 cron-job 喚醒用）
+// 健康檢查端點
 // ==========================================
 app.get('/', (req, res) => {
   res.json({ status: 'ok', subscribers: subscribers.length, indoorTemp: INDOOR_TEMP });
@@ -656,7 +749,9 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
   console.log(`📡 預報 API：F-D0047-089`);
-  console.log(`📅 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
-  console.log(`📋 訂閱用戶：${subscribers.length} 人`);
+  console.log(`📅 每日推播：上午 7:00 (台灣時間)`);
+  console.log(`📋 個人訂閱：${subscribers.length} 人`);
+  console.log(`👥 群組數量：${groups.length} 個`);
+  console.log(`💬 群組查詢：私訊回覆，不打擾群組`);
   console.log(`========================================\n`);
 });
