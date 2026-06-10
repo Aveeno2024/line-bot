@@ -25,7 +25,7 @@ let subscribers = [];
 let groups = [];
 let humidityHistory = {};
 
-// 限制查詢頻率（避免洗版）
+// 限制查詢頻率
 let lastQueryTime = {};
 
 // ==========================================
@@ -334,13 +334,15 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// Flex Message
+// 第一頁：Flex Message（6都預報表格）
+// 修改：預報日期放標題，室內基準放底部
 // ==========================================
 async function generatePage1Flex() {
   const today = getDateString(0);
   const tomorrow = getDateString(1);
   const dayAfter = getDateString(2);
   const citiesData = [];
+  
   for (const city of CITIES) {
     citiesData.push(await calculateCityThreeDays(city));
   }
@@ -368,35 +370,57 @@ async function generatePage1Flex() {
   
   return {
     type: "flex",
-    altText: `🌡️💧 六都皮膚濕度壓力指數 ${today}~${dayAfter}`,
+    altText: `🌡️💧 皮膚濕度壓力指數 ${today}~${dayAfter}`,
     contents: {
-      type: "bubble", size: "mega",
-      header: { type: "box", layout: "vertical", contents: [
-        { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "xl", color: "#ffffff" },
-        { type: "text", text: `六都連續3天預報 ${today} ~ ${dayAfter}`, size: "sm", color: "#dddddd", margin: "xs" }
-      ], backgroundColor: "#667eea", paddingAll: "20px" },
-      body: { type: "box", layout: "vertical", spacing: "sm", contents: [
-        { type: "box", layout: "horizontal", contents: [
-          { type: "text", text: "🏠 室內基準", size: "xs", color: "#999999" },
-          { type: "text", text: `冷氣房 ${INDOOR_TEMP}℃`, size: "xs", color: "#666666", align: "end" }
-        ]},
-        { type: "separator", margin: "md" },
-        ...tableRows,
-        { type: "separator", margin: "md" },
-        { type: "box", layout: "horizontal", contents: [
-          { type: "text", text: "🟢 低衝擊", size: "xxs", color: "#00CC00", flex: 1, align: "center" },
-          { type: "text", text: "🟡 中衝擊", size: "xxs", color: "#FFCC00", flex: 1, align: "center" },
-          { type: "text", text: "🟠 高衝擊", size: "xxs", color: "#FF6600", flex: 1, align: "center" },
-          { type: "text", text: "🔴 危險衝擊", size: "xxs", color: "#FF0000", flex: 1, align: "center" }
-        ]}
-      ], paddingAll: "20px" },
-      footer: { type: "box", layout: "vertical", contents: [
-        { type: "button", style: "primary", color: "#667eea", action: { type: "message", label: "📋 查看詳細說明", text: "詳細說明" } }
-      ], paddingAll: "12px" }
+      type: "bubble",
+      size: "mega",
+      header: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          // Icon 使用 emoji 代替
+          { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "xl", color: "#ffffff" },
+          { type: "text", text: `預報日期 ${today} ~ ${dayAfter}`, size: "sm", color: "#dddddd", margin: "xs" }
+        ],
+        backgroundColor: "#667eea",
+        paddingAll: "20px"
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          ...tableRows,
+          { type: "separator", margin: "md" },
+          { type: "box", layout: "horizontal", contents: [
+            { type: "text", text: "🟢 低衝擊", size: "xxs", color: "#00CC00", flex: 1, align: "center" },
+            { type: "text", text: "🟡 中衝擊", size: "xxs", color: "#FFCC00", flex: 1, align: "center" },
+            { type: "text", text: "🟠 高衝擊", size: "xxs", color: "#FF6600", flex: 1, align: "center" },
+            { type: "text", text: "🔴 危險衝擊", size: "xxs", color: "#FF0000", flex: 1, align: "center" }
+          ]}
+        ],
+        paddingAll: "20px"
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "xs",
+        contents: [
+          { type: "separator" },
+          { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "xxs", color: "#999999", align: "center" },
+          { type: "text", text: "📊 數據來源：中央氣象署", size: "xxs", color: "#999999", align: "center" },
+          { type: "text", text: "📖 科學依據：詳見 AMDS 官網查看燈號說明及建議", size: "xxs", color: "#999999", align: "center" },
+          { type: "button", style: "link", height: "sm", action: { type: "message", label: "📋 查看詳細說明", text: "詳細說明" }, margin: "md", color: "#667eea" }
+        ],
+        paddingAll: "12px"
+      }
     }
   };
 }
 
+// ==========================================
+// 第二頁：完整使用說明與保健建議
+// ==========================================
 async function generatePage2Flex() {
   return {
     type: "flex",
@@ -418,45 +442,36 @@ async function generatePage2Flex() {
         layout: "vertical",
         spacing: "md",
         contents: [
+          // 1. 燈號意義
           { type: "text", text: "🚦 燈號意義", weight: "bold", size: "sm" },
           { type: "text", text: "🟢 低衝擊", weight: "bold", size: "xs", color: "#00CC00" },
-          { type: "text", text: "   維持日常基礎保養，正常清潔與保濕", size: "xs", color: "#666666", margin: "xs" },
+          { type: "text", text: "   濕度穩定且介於理想範圍，皮膚屏障無顯著壓力", size: "xs", color: "#666666", margin: "xs" },
           { type: "text", text: "🟡 中衝擊", weight: "bold", size: "xs", color: "#FFCC00", margin: "xs" },
-          { type: "text", text: "   乾燥型：提高保濕頻率，每2-3小時補擦保濕產品", size: "xs", color: "#666666" },
-          { type: "text", text: "   潮濕型：開啟除濕機，保持皮膚乾爽", size: "xs", color: "#666666" },
+          { type: "text", text: "   濕度變化 15-30% 或室內濕度 <45% / ≥75%", size: "xs", color: "#666666" },
           { type: "text", text: "🟠 高衝擊", weight: "bold", size: "xs", color: "#FF6600", margin: "xs" },
-          { type: "text", text: "   提前防護，減少長時間戶外停留，主動調整室內濕度", size: "xs", color: "#666666" },
+          { type: "text", text: "   濕度變化 30-50% 且室內濕度 <45%", size: "xs", color: "#666666" },
           { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "xs", color: "#FF0000", margin: "xs" },
-          { type: "text", text: "   避免非必要外出，立即調整室內環境，觀察皮膚反應", size: "xs", color: "#666666" },
+          { type: "text", text: "   濕度變化 ≥50% 且室內濕度 <40% 或室內濕度 ≥85%", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          { type: "text", text: "📊 燈號判定邏輯", weight: "bold", size: "sm" },
-          { type: "text", text: "Delta_RH = 今日濕度 - 昨日濕度（濕度變化幅度）", size: "xs", color: "#666666" },
-          { type: "text", text: "RH_in = 室內推算濕度（依據工研院終極公式）", size: "xs", color: "#666666" },
-          { type: "text", text: "路徑A（濕度衝擊）：依據 Delta_RH 與 RH_in 複合條件", size: "xs", color: "#666666" },
-          { type: "text", text: "路徑B（極端穩態壓力）：Delta_RH < 15% 且 RH_in 極端", size: "xs", color: "#666666" },
-          { type: "text", text: "最終燈號 = 取兩路徑最高等級", size: "xs", color: "#666666" },
+          
+          // 2. 保健建議
+          { type: "text", text: "💡 保健建議", weight: "bold", size: "sm" },
+          { type: "text", text: "🟢 低衝擊：維持日常基礎保養", size: "xs", color: "#666666" },
+          { type: "text", text: "🟡 中衝擊：乾燥型加強保濕／潮濕型開啟除濕", size: "xs", color: "#666666" },
+          { type: "text", text: "🟠 高衝擊：減少戶外停留，主動調整室內濕度", size: "xs", color: "#666666" },
+          { type: "text", text: "🔴 危險衝擊：避免外出，立即調整環境", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-          { type: "text", text: "📐 室內濕度推算公式", weight: "bold", size: "sm" },
-          { type: "text", text: "溫差 ΔT ≥ 5℃（連續強制冷卻）：", size: "xs", color: "#666666" },
-          { type: "text", text: "RH_in = 0.82 × RH_out - 0.34 × ΔT - 16", size: "xs", color: "#666666" },
-          { type: "text", text: "溫差 2℃ ~ 5℃（間歇冷卻）：", size: "xs", color: "#666666" },
-          { type: "text", text: "RH_in = 0.85 × RH_out - 0.15 × ΔT - 8", size: "xs", color: "#666666" },
-          { type: "text", text: "溫差 < 2℃（雨天低溫高濕）：", size: "xs", color: "#666666" },
-          { type: "text", text: "RH_in = RH_out - 5", size: "xs", color: "#666666" },
-          { type: "separator", margin: "md" },
+          
+          // 3. 查詢指令
           { type: "text", text: "🔍 查詢指令", weight: "bold", size: "sm" },
           { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "xs", color: "#666666" },
           { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
+          
+          // 4. 訂閱管理
           { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
-          { type: "text", text: "• 輸入「加入訂閱」開啟每日推播", size: "xs", color: "#666666" },
-          { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" },
-          { type: "separator", margin: "md" },
-          { type: "text", text: "📖 文獻依據", weight: "bold", size: "sm" },
-          { type: "text", text: "1. Denda et al. (2002) — 濕度突然下降會破壞皮膚屏障恆定", size: "xxs", color: "#999999", wrap: true },
-          { type: "text", text: "2. 環境濕度與皮膚綜述 — 闡明低濕導致乾燥、粗糙", size: "xxs", color: "#999999", wrap: true },
-          { type: "text", text: "3. PMC (2019) — 高濕環境延緩脂質屏障形成", size: "xxs", color: "#999999", wrap: true },
-          { type: "text", text: "4. 皮膚氣候趨勢綜述 (2024) — 急遽濕度變化導致水分異常流失", size: "xxs", color: "#999999", wrap: true }
+          { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "xs", color: "#666666" },
+          { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" }
         ],
         paddingAll: "20px"
       },
@@ -466,6 +481,7 @@ async function generatePage2Flex() {
         contents: [
           { type: "separator" },
           { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式 R²≈0.85", size: "xxs", color: "#999999", align: "center" },
+          { type: "text", text: "📖 科學依據：Denda et al. (2002)、PMC (2019) 等", size: "xxs", color: "#999999", align: "center" },
           { type: "text", text: "💡 輸入「全台」開始查詢", size: "xxs", color: "#999999", align: "center" }
         ],
         paddingAll: "12px"
@@ -495,7 +511,6 @@ async function dailyPublishTask() {
   const page1 = await generatePage1Flex();
   const page2 = await generatePage2Flex();
   
-  // 只推播給個人訂閱者（不推播給群組）
   console.log(`📤 推播給 ${subscribers.length} 位個人訂閱者`);
   for (const userId of subscribers) {
     await pushToUser(userId, page1, page2);
@@ -538,7 +553,6 @@ async function replyTextMessage(replyToken, text) {
   }
 }
 
-// 私訊發送（給群組中的發問者）
 async function sendPrivateMessage(userId, page1, page2) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1, page2] }, {
@@ -598,7 +612,6 @@ app.post('/webhook', async (req, res) => {
       
       console.log(`📱 來源: ${sourceType}, ID: ${sourceId}`);
       
-      // Bot 被加入群組
       if (event.type === 'join') {
         const groupId = event.source?.groupId;
         if (groupId && !groups.includes(groupId)) {
@@ -617,7 +630,6 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 用戶加入 Bot（個人）
       if (event.type === 'follow') {
         if (!subscribers.includes(userId)) {
           subscribers.push(userId);
@@ -630,7 +642,6 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 用戶封鎖 Bot
       if (event.type === 'unfollow') {
         const idx = subscribers.indexOf(userId);
         if (idx !== -1) {
@@ -641,12 +652,10 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 處理文字訊息
       if (event.type === 'message' && event.message.type === 'text') {
         const input = event.message.text.trim();
         console.log(`📱 輸入: "${input}"`);
         
-        // 取消訂閱（個人）
         if (input === '取消訂閱' && sourceType === 'user') {
           const idx = subscribers.indexOf(userId);
           if (idx !== -1) {
@@ -659,7 +668,6 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 加入訂閱（個人）
         if (input === '加入訂閱' && sourceType === 'user') {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
@@ -671,24 +679,19 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 詳細說明（個人或群組）
         if (input === '詳細說明') {
           const page2 = await generatePage2Flex();
           await replyFlexMessage(replyToken, page2);
           continue;
         }
         
-        // 全台查詢
         if (input === '全台' || input === 'ALL') {
           const page1 = await generatePage1Flex();
           const page2 = await generatePage2Flex();
           
           if (sourceType === 'user') {
-            // 個人：直接回覆
             await replyBothFlexMessages(replyToken, page1, page2);
           } else {
-            // 群組：私訊給發問者，群組只發提示
-            // 限制頻率：同一群組 30 秒內只能查詢一次
             const now = Date.now();
             const lastTime = lastQueryTime[sourceId] || 0;
             
@@ -698,11 +701,9 @@ app.post('/webhook', async (req, res) => {
             }
             lastQueryTime[sourceId] = now;
             
-            // 私訊給發問者
             const privateSent = await sendPrivateMessage(userId, page1, page2);
             
             if (privateSent) {
-              // 在群組發送簡短提示
               await replyTextMessage(replyToken, '📊 已將六都預報私訊給您，請查看 LINE 的「聊天」列表');
             } else {
               await replyTextMessage(replyToken, '⚠️ 無法發送私訊，請先加入好友並允許接收訊息');
@@ -711,7 +712,6 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 預設回應（個人或群組）
         const page1 = await generatePage1Flex();
         if (sourceType === 'user') {
           await replyFlexMessage(replyToken, page1);
