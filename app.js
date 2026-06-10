@@ -347,72 +347,138 @@ async function generatePage1Flex() {
     citiesData.push(await calculateCityThreeDays(city));
   }
   
-  const tableRows = [
+  // 將城市分成兩組，避免表格過長
+  const firstHalf = citiesData.slice(0, 3);
+  const secondHalf = citiesData.slice(3, 6);
+  
+  // 表格行
+  const tableRows1 = [
     { type: "box", layout: "horizontal", contents: [
-      { type: "text", text: "城市", weight: "bold", size: "sm", flex: 2 },
-      { type: "text", text: today, weight: "bold", size: "sm", flex: 1, align: "center" },
-      { type: "text", text: tomorrow, weight: "bold", size: "sm", flex: 1, align: "center" },
-      { type: "text", text: dayAfter, weight: "bold", size: "sm", flex: 1, align: "center" }
+      { type: "text", text: "城市", weight: "bold", size: "md", flex: 2 },
+      { type: "text", text: today, weight: "bold", size: "md", flex: 1, align: "center" },
+      { type: "text", text: tomorrow, weight: "bold", size: "md", flex: 1, align: "center" },
+      { type: "text", text: dayAfter, weight: "bold", size: "md", flex: 1, align: "center" }
     ]},
     { type: "separator", margin: "sm" }
   ];
   
-  for (const cityData of citiesData) {
-    tableRows.push({
+  for (const cityData of firstHalf) {
+    tableRows1.push({
       type: "box", layout: "horizontal", contents: [
-        { type: "text", text: cityData.city, size: "sm", flex: 2 },
-        { type: "text", text: cityData.days[0].shock.emoji, size: "sm", flex: 1, align: "center", color: cityData.days[0].shock.color },
-        { type: "text", text: cityData.days[1].shock.emoji, size: "sm", flex: 1, align: "center", color: cityData.days[1].shock.color },
-        { type: "text", text: cityData.days[2].shock.emoji, size: "sm", flex: 1, align: "center", color: cityData.days[2].shock.color }
+        { type: "text", text: cityData.city, size: "md", flex: 2 },
+        { type: "text", text: cityData.days[0].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[0].shock.color },
+        { type: "text", text: cityData.days[1].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[1].shock.color },
+        { type: "text", text: cityData.days[2].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[2].shock.color }
       ]
     });
   }
   
+  const tableRows2 = [];
+  for (const cityData of secondHalf) {
+    tableRows2.push({
+      type: "box", layout: "horizontal", contents: [
+        { type: "text", text: cityData.city, size: "md", flex: 2 },
+        { type: "text", text: cityData.days[0].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[0].shock.color },
+        { type: "text", text: cityData.days[1].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[1].shock.color },
+        { type: "text", text: cityData.days[2].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[2].shock.color }
+      ]
+    });
+  }
+  
+  // 返回 Carousel 包含兩張卡片
   return {
     type: "flex",
     altText: `🌡️💧 皮膚濕度壓力指數 ${today}~${dayAfter}`,
     contents: {
-      type: "bubble",
-      size: "mega",
-      header: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "lg", color: "#ffffff" },
-          { type: "text", text: `預報日期 ${today} ~ ${dayAfter}`, size: "sm", color: "#dddddd", margin: "xs" }
-        ],
-        backgroundColor: "#667eea",
-        paddingAll: "20px"
-      },
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "sm",
-        contents: [
-          ...tableRows,
-          { type: "separator", margin: "md" },
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🟢 低衝擊", size: "xs", color: "#00CC00", flex: 1, align: "center" },
-            { type: "text", text: "🟡 中衝擊", size: "xs", color: "#FFCC00", flex: 1, align: "center" },
-            { type: "text", text: "🟠 高衝擊", size: "xs", color: "#FF6600", flex: 1, align: "center" },
-            { type: "text", text: "🔴 危險衝擊", size: "xs", color: "#FF0000", flex: 1, align: "center" }
-          ]}
-        ],
-        paddingAll: "20px"
-      },
-      footer: {
-        type: "box",
-        layout: "vertical",
-        spacing: "xs",
-        contents: [
-          { type: "separator" },
-          { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "xs", color: "#999999", align: "center" },
-          { type: "text", text: "📊 數據來源：中央氣象署", size: "xs", color: "#999999", align: "center" },
-          { type: "text", text: "📖 科學依據：詳見 AMDS 官網", size: "xs", color: "#999999", align: "center" },
-          { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
-        ],
-        paddingAll: "12px"
-      }
+      type: "carousel",
+      contents: [
+        // 第一張卡片：北部城市
+        {
+          type: "bubble",
+          size: "mega",
+          header: {
+            type: "box",
+            layout: "vertical",
+            contents: [
+              { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "lg", color: "#ffffff" },
+              { type: "text", text: `預報日期 ${today} ~ ${dayAfter}`, size: "sm", color: "#dddddd", margin: "xs" }
+            ],
+            backgroundColor: "#667eea",
+            paddingAll: "20px"
+          },
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "sm",
+            contents: [
+              ...tableRows1,
+              { type: "separator", margin: "md" },
+              { type: "box", layout: "horizontal", contents: [
+                { type: "text", text: "🟢 低衝擊", size: "sm", color: "#00CC00", flex: 1, align: "center" },
+                { type: "text", text: "🟡 中衝擊", size: "sm", color: "#FFCC00", flex: 1, align: "center" },
+                { type: "text", text: "🟠 高衝擊", size: "sm", color: "#FF6600", flex: 1, align: "center" },
+                { type: "text", text: "🔴 危險衝擊", size: "sm", color: "#FF0000", flex: 1, align: "center" }
+              ]}
+            ],
+            paddingAll: "20px"
+          },
+          footer: {
+            type: "box",
+            layout: "vertical",
+            spacing: "xs",
+            contents: [
+              { type: "separator" },
+              { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "sm", color: "#999999", align: "center" },
+              { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
+              { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
+            ],
+            paddingAll: "12px"
+          }
+        },
+        // 第二張卡片：南部城市
+        {
+          type: "bubble",
+          size: "mega",
+          header: {
+            type: "box",
+            layout: "vertical",
+            contents: [
+              { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "lg", color: "#ffffff" },
+              { type: "text", text: `預報日期 ${today} ~ ${dayAfter}`, size: "sm", color: "#dddddd", margin: "xs" }
+            ],
+            backgroundColor: "#667eea",
+            paddingAll: "20px"
+          },
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "sm",
+            contents: [
+              ...tableRows2,
+              { type: "separator", margin: "md" },
+              { type: "box", layout: "horizontal", contents: [
+                { type: "text", text: "🟢 低衝擊", size: "sm", color: "#00CC00", flex: 1, align: "center" },
+                { type: "text", text: "🟡 中衝擊", size: "sm", color: "#FFCC00", flex: 1, align: "center" },
+                { type: "text", text: "🟠 高衝擊", size: "sm", color: "#FF6600", flex: 1, align: "center" },
+                { type: "text", text: "🔴 危險衝擊", size: "sm", color: "#FF0000", flex: 1, align: "center" }
+              ]}
+            ],
+            paddingAll: "20px"
+          },
+          footer: {
+            type: "box",
+            layout: "vertical",
+            spacing: "xs",
+            contents: [
+              { type: "separator" },
+              { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "sm", color: "#999999", align: "center" },
+              { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
+              { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
+            ],
+            paddingAll: "12px"
+          }
+        }
+      ]
     }
   };
 }
@@ -424,66 +490,86 @@ async function generatePage2Flex() {
     type: "flex",
     altText: "皮膚保健建議與使用說明",
     contents: {
-      type: "bubble",
-      size: "mega",
-      header: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          { type: "text", text: "📋 使用說明與保健建議", weight: "bold", size: "lg", color: "#ffffff" }
-        ],
-        backgroundColor: "#667eea",
-        paddingAll: "20px"
-      },
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "md",
-        contents: [
-          // 1. 燈號意義
-          { type: "text", text: "🚦 燈號意義", weight: "bold", size: "sm" },
-          { type: "text", text: "🟢 低衝擊", weight: "bold", size: "xs", color: "#00CC00" },
-          { type: "text", text: "   濕度穩定且介於理想範圍，皮膚屏障無顯著壓力", size: "xs", color: "#666666", margin: "xs" },
-          { type: "text", text: "🟡 中衝擊", weight: "bold", size: "xs", color: "#FFCC00", margin: "xs" },
-          { type: "text", text: "   濕度變化 15-30% 或室內濕度 <45% / ≥75%", size: "xs", color: "#666666" },
-          { type: "text", text: "🟠 高衝擊", weight: "bold", size: "xs", color: "#FF6600", margin: "xs" },
-          { type: "text", text: "   濕度變化 30-50% 且室內濕度 <45%", size: "xs", color: "#666666" },
-          { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "xs", color: "#FF0000", margin: "xs" },
-          { type: "text", text: "   濕度變化 ≥50% 且室內濕度 <40% 或室內濕度 ≥85%", size: "xs", color: "#666666" },
-          { type: "separator", margin: "md" },
-          
-          // 2. 保健建議
-          { type: "text", text: "💡 保健建議", weight: "bold", size: "sm" },
-          { type: "text", text: "🟢 低衝擊：維持日常基礎保養", size: "xs", color: "#666666" },
-          { type: "text", text: "🟡 中衝擊：乾燥型加強保濕／潮濕型開啟除濕", size: "xs", color: "#666666" },
-          { type: "text", text: "🟠 高衝擊：減少戶外停留，主動調整室內濕度", size: "xs", color: "#666666" },
-          { type: "text", text: "🔴 危險衝擊：避免外出，立即調整環境", size: "xs", color: "#666666" },
-          { type: "separator", margin: "md" },
-          
-          // 3. 查詢指令
-          { type: "text", text: "🔍 查詢指令", weight: "bold", size: "sm" },
-          { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "xs", color: "#666666" },
-          { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "xs", color: "#666666" },
-          { type: "separator", margin: "md" },
-          
-          // 4. 訂閱管理
-          { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
-          { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "xs", color: "#666666" },
-          { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" }
-        ],
-        paddingAll: "20px"
-      },
-      footer: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          { type: "separator" },
-          { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式 R²≈0.85", size: "xxs", color: "#999999", align: "center" },
-          { type: "text", text: "📖 科學依據：Denda et al. (2002)、PMC (2019) 等", size: "xxs", color: "#999999", align: "center" },
-          { type: "text", text: "💡 輸入「全台」開始查詢", size: "xxs", color: "#999999", align: "center" }
-        ],
-        paddingAll: "12px"
-      }
+      type: "carousel",
+      contents: [
+        // 第一張卡片：燈號意義 + 保健建議
+        {
+          type: "bubble",
+          size: "mega",
+          header: {
+            type: "box",
+            layout: "vertical",
+            contents: [
+              { type: "text", text: "📋 燈號意義與保健建議", weight: "bold", size: "lg", color: "#ffffff" }
+            ],
+            backgroundColor: "#667eea",
+            paddingAll: "20px"
+          },
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "md",
+            contents: [
+              { type: "text", text: "🚦 燈號意義", weight: "bold", size: "md" },
+              { type: "text", text: "🟢 低衝擊", weight: "bold", size: "sm", color: "#00CC00" },
+              { type: "text", text: "濕度穩定且介於理想範圍，皮膚屏障無顯著壓力", size: "sm", color: "#666666", wrap: true },
+              { type: "text", text: "🟡 中衝擊", weight: "bold", size: "sm", color: "#FFCC00", margin: "xs" },
+              { type: "text", text: "濕度變化 15-30% 或室內濕度 <45% / ≥75%", size: "sm", color: "#666666", wrap: true },
+              { type: "text", text: "🟠 高衝擊", weight: "bold", size: "sm", color: "#FF6600", margin: "xs" },
+              { type: "text", text: "濕度變化 30-50% 且室內濕度 <45%", size: "sm", color: "#666666", wrap: true },
+              { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "sm", color: "#FF0000", margin: "xs" },
+              { type: "text", text: "濕度變化 ≥50% 且室內濕度 <40% 或室內濕度 ≥85%", size: "sm", color: "#666666", wrap: true },
+              { type: "separator", margin: "md" },
+              { type: "text", text: "💡 保健建議", weight: "bold", size: "md" },
+              { type: "text", text: "🟢 低衝擊：維持日常基礎保養", size: "sm", color: "#666666", wrap: true },
+              { type: "text", text: "🟡 中衝擊：乾燥型加強保濕／潮濕型開啟除濕", size: "sm", color: "#666666", wrap: true },
+              { type: "text", text: "🟠 高衝擊：減少戶外停留，主動調整室內濕度", size: "sm", color: "#666666", wrap: true },
+              { type: "text", text: "🔴 危險衝擊：避免外出，立即調整環境", size: "sm", color: "#666666", wrap: true }
+            ],
+            paddingAll: "20px"
+          }
+        },
+        // 第二張卡片：查詢指令 + 訂閱管理
+        {
+          type: "bubble",
+          size: "mega",
+          header: {
+            type: "box",
+            layout: "vertical",
+            contents: [
+              { type: "text", text: "📋 使用說明", weight: "bold", size: "lg", color: "#ffffff" }
+            ],
+            backgroundColor: "#667eea",
+            paddingAll: "20px"
+          },
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "md",
+            contents: [
+              { type: "text", text: "🔍 查詢指令", weight: "bold", size: "md" },
+              { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "sm", color: "#666666", wrap: true },
+              { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "sm", color: "#666666", wrap: true },
+              { type: "separator", margin: "md" },
+              { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "md" },
+              { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "sm", color: "#666666", wrap: true },
+              { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "sm", color: "#666666", wrap: true }
+            ],
+            paddingAll: "20px"
+          },
+          footer: {
+            type: "box",
+            layout: "vertical",
+            contents: [
+              { type: "separator" },
+              { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式", size: "xs", color: "#999999", align: "center" },
+              { type: "text", text: "📖 科學依據：Denda et al. (2002)、PMC (2019) 等", size: "xs", color: "#999999", align: "center" },
+              { type: "text", text: "💡 輸入「全台」開始查詢", size: "xs", color: "#999999", align: "center" }
+            ],
+            paddingAll: "12px"
+          }
+        }
+      ]
     }
   };
 }
