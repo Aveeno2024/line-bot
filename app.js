@@ -335,7 +335,6 @@ function getDateString(offset = 0) {
 
 // ==========================================
 // 第一頁：Flex Message（6都預報表格）
-// 
 // ==========================================
 async function generatePage1Flex() {
   const today = getDateString(0);
@@ -391,12 +390,10 @@ async function generatePage1Flex() {
         contents: [
           ...tableRows,
           { type: "separator", margin: "md" },
-          // 第一行：低衝擊 + 中衝擊
           { type: "box", layout: "horizontal", contents: [
             { type: "text", text: "🟢 低衝擊", size: "sm", color: "#00CC00", flex: 1, align: "center" },
             { type: "text", text: "🟡 中衝擊", size: "sm", color: "#FFCC00", flex: 1, align: "center" }
           ]},
-          // 第二行：高衝擊 + 危險衝擊
           { type: "box", layout: "horizontal", contents: [
             { type: "text", text: "🟠 高衝擊", size: "sm", color: "#FF6600", flex: 1, align: "center" },
             { type: "text", text: "🔴 危險衝擊", size: "sm", color: "#FF0000", flex: 1, align: "center" }
@@ -419,6 +416,7 @@ async function generatePage1Flex() {
     }
   };
 }
+
 // ==========================================
 // 第二頁：完整使用說明與保健建議
 // ==========================================
@@ -443,7 +441,6 @@ async function generatePage2Flex() {
         layout: "vertical",
         spacing: "md",
         contents: [
-          // 1. 燈號意義（兩行說明）
           { type: "text", text: "🚦 燈號意義", weight: "bold", size: "md" },
           { type: "text", text: "🟢 低衝擊", weight: "bold", size: "sm", color: "#00CC00" },
           { type: "text", text: "濕度穩定且介於理想範圍，皮膚屏障無顯著壓力", size: "sm", color: "#666666", wrap: true },
@@ -455,7 +452,6 @@ async function generatePage2Flex() {
           { type: "text", text: "濕度變化 ≥50% 且室內濕度 <40% 或室內濕度 ≥85%", size: "sm", color: "#666666", wrap: true },
           { type: "separator", margin: "md" },
           
-          // 2. 保健建議
           { type: "text", text: "💡 保健建議", weight: "bold", size: "md" },
           { type: "text", text: "🟢 低衝擊：維持日常基礎保養", size: "sm", color: "#666666", wrap: true },
           { type: "text", text: "🟡 中衝擊：乾燥型加強保濕／潮濕型開啟除濕", size: "sm", color: "#666666", wrap: true },
@@ -463,13 +459,11 @@ async function generatePage2Flex() {
           { type: "text", text: "🔴 危險衝擊：避免外出，立即調整環境", size: "sm", color: "#666666", wrap: true },
           { type: "separator", margin: "md" },
           
-          // 3. 查詢指令
           { type: "text", text: "🔍 查詢指令", weight: "bold", size: "md" },
           { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "sm", color: "#666666", wrap: true },
           { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "sm", color: "#666666", wrap: true },
           { type: "separator", margin: "md" },
           
-          // 4. 訂閱管理
           { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "md" },
           { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "sm", color: "#666666", wrap: true },
           { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "sm", color: "#666666", wrap: true }
@@ -490,6 +484,7 @@ async function generatePage2Flex() {
     }
   };
 }
+
 // ==========================================
 // 推播函數
 // ==========================================
@@ -612,6 +607,7 @@ app.post('/webhook', async (req, res) => {
       
       console.log(`📱 來源: ${sourceType}, ID: ${sourceId}`);
       
+      // Bot 被加入群組
       if (event.type === 'join') {
         const groupId = event.source?.groupId;
         if (groupId && !groups.includes(groupId)) {
@@ -630,18 +626,34 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
+      // 用戶加入 Bot（個人）- 修改為簡短歡迎訊息
       if (event.type === 'follow') {
         if (!subscribers.includes(userId)) {
           subscribers.push(userId);
           saveSubscribers();
           console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
-          const page1 = await generatePage1Flex();
-          const page2 = await generatePage2Flex();
-          await replyBothFlexMessages(replyToken, page1, page2);
+          // 修改為簡短的歡迎訊息，而不是直接顯示全台預報
+          await replyTextMessage(replyToken, 
+            `🎉 歡迎加入【皮膚濕度壓力指數】！
+
+📋 已為您自動開啟每日提醒，每天上午 7:00 收到六都連續3天預報。
+
+📱 查詢方式：
+• 輸入「全台」查看六都3天預報
+• 輸入「詳細說明」查看完整使用說明
+
+🔔 訂閱管理：
+• 輸入「加入訂閱」開啟每日提醒
+• 輸入「取消訂閱」關閉
+
+📖 本指數依據 Denda et al. (2002) 等國際期刊研究設計
+
+💡 試試看：現在輸入「全台」開始查詢！`);
         }
         continue;
       }
       
+      // 用戶封鎖 Bot
       if (event.type === 'unfollow') {
         const idx = subscribers.indexOf(userId);
         if (idx !== -1) {
@@ -652,23 +664,26 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
+      // 處理文字訊息
       if (event.type === 'message' && event.message.type === 'text') {
         const input = event.message.text.trim();
         console.log(`📱 輸入: "${input}"`);
         
-        if (input === '取消訂閱' && sourceType === 'user') {
+        // 取消訂閱
+        if (input === '取消訂閱') {
           const idx = subscribers.indexOf(userId);
           if (idx !== -1) {
             subscribers.splice(idx, 1);
             saveSubscribers();
-            await replyTextMessage(replyToken, '✅ 已取消每日提醒！');
+            await replyTextMessage(replyToken, '✅ 已取消每日提醒！輸入「加入訂閱」可重新開啟。');
           } else {
-            await replyTextMessage(replyToken, 'ℹ️ 您尚未訂閱');
+            await replyTextMessage(replyToken, 'ℹ️ 您尚未訂閱，無需取消。');
           }
           continue;
         }
         
-        if (input === '加入訂閱' && sourceType === 'user') {
+        // 加入訂閱
+        if (input === '加入訂閱') {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
             saveSubscribers();
@@ -679,12 +694,14 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
+        // 詳細說明
         if (input === '詳細說明') {
           const page2 = await generatePage2Flex();
           await replyFlexMessage(replyToken, page2);
           continue;
         }
         
+        // 全台查詢
         if (input === '全台' || input === 'ALL') {
           const page1 = await generatePage1Flex();
           const page2 = await generatePage2Flex();
@@ -692,6 +709,7 @@ app.post('/webhook', async (req, res) => {
           if (sourceType === 'user') {
             await replyBothFlexMessages(replyToken, page1, page2);
           } else {
+            // 群組處理
             const now = Date.now();
             const lastTime = lastQueryTime[sourceId] || 0;
             
@@ -712,6 +730,7 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
+        // 預設回應
         const page1 = await generatePage1Flex();
         if (sourceType === 'user') {
           await replyFlexMessage(replyToken, page1);
