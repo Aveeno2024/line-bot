@@ -12,8 +12,98 @@ const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
+// GitHub 設定（從環境變數讀取）
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const GITHUB_REPO = process.env.GITHUB_REPO;
+
+// 檔案路徑定義
+const SUBSCRIBERS_FILE = './subscribers.json';
+const HUMIDITY_HISTORY_FILE = './humidity_history.json';
+
+// 全域變數
+let subscribers = [];
+let humidityHistory = {};
+
+// ==========================================
+// GitHub 同步訂閱資料
+// ==========================================
+async function syncToGitHub() {
+  if (!GITHUB_TOKEN || !GITHUB_REPO) {
+    console.log('⚠️ GitHub 未設定，跳過同步');
+    return;
+  }
+  
+  try {
+    const content = fs.readFileSync(SUBSCRIBERS_FILE, 'utf8');
+    const base64Content = Buffer.from(content).toString('base64');
+    
+    let sha = null;
+    try {
+      const fileRes = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/contents/subscribers.json`, {
+        headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+      });
+      sha = fileRes.data.sha;
+    } catch(e) { /* 檔案不存在 */ }
+    
+    await axios.put(`https://api.github.com/repos/${GITHUB_REPO}/contents/subscribers.json`, {
+      message: `Update subscribers - ${new Date().toISOString()}`,
+      content: base64Content,
+      sha: sha
+    }, {
+      headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+    });
+    console.log('✅ 訂閱資料已同步到 GitHub');
+  } catch (err) {
+    console.error('❌ GitHub 同步失敗:', err.message);
+  }
+}
+
+// 從 GitHub 載入訂閱資料
+async function loadFromGitHub() {
+  if (!GITHUB_TOKEN || !GITHUB_REPO) {
+    console.log('⚠️ GitHub 未設定，從本地載入');
+    return;
+  }
+  
+  try {
+    const res = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/contents/subscribers.json`, {
+      headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
+    });
+    const content = Buffer.from(res.data.content, 'base64').toString('utf8');
+    subscribers = JSON.parse(content);
+    console.log(`📋 從 GitHub 載入 ${subscribers.length} 位訂閱用戶`);
+    // 同時儲存到本地
+    fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(subscribers, null, 2));
+  } catch(e) {
+    console.log('📋 GitHub 無訂閱資料，使用本地檔案');
+    // 嘗試從本地載入
+    try {
+      if (fs.existsSync(SUBSCRIBERS_FILE)) {
+        subscribers = JSON.parse(fs.readFileSync(SUBSCRIBERS_FILE, 'utf8'));
+        console.log(`📋 從本地載入 ${subscribers.length} 位訂閱用戶`);
+      }
+    } catch(err) {}
+  }
+}
+
+// 儲存訂閱資料（自動同步到 GitHub）
+function saveSubscribers() {
+  fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(subscribers, null, 2));
+  // 非同步同步到 GitHub
+  if (GITHUB_TOKEN && GITHUB_REPO) {
+    syncToGitHub().catch(err => console.error('GitHub 同步錯誤:', err.message));
+  }
+}
+
+// 啟動時載入訂閱資料
+loadFromGitHub();
+
+// ==========================================
+// 室內環境設定
+// ==========================================
 const INDOOR_TEMP = 26;
 
+// 6都城市列表
 const CITIES = [
   { code: "1", name: "臺北市", displayName: "臺北市", apiName: "臺北市" },
   { code: "2", name: "新北市", displayName: "新北市", apiName: "新北市" },
@@ -23,10 +113,9 @@ const CITIES = [
   { code: "6", name: "高雄市", displayName: "高雄市", apiName: "高雄市" }
 ];
 
-// 歷史濕度儲存
-const HUMIDITY_HISTORY_FILE = './humidity_history.json';
-let humidityHistory = {};
-
+// ==========================================
+// 濕度歷史紀錄
+// ==========================================
 try {
   if (fs.existsSync(HUMIDITY_HISTORY_FILE)) {
     const data = fs.readFileSync(HUMIDITY_HISTORY_FILE, 'utf8');
@@ -55,7 +144,7 @@ async function saveTodayHumidity(cityName, humidity) {
 }
 
 // ==========================================
-// 預報 API（修正版）
+// 中央氣象署預報 API（F-D0047-089）
 // ==========================================
 async function getForecastWeather(city, dateOffset = 0) {
   console.log(`🌡️ 獲取 ${city.displayName} 預報 (offset=${dateOffset})...`);
@@ -157,7 +246,14 @@ async function getWeather(city, dateOffset = 0) {
     weather = await getCurrentWeather(city);
   }
   if (!weather) {
-    const mockData = { "臺北市": { temp: 32, humidity: 58 }, "新北市": { temp: 31, humidity: 60 }, "桃園市": { temp: 30, humidity: 62 }, "臺中市": { temp: 31, humidity: 55 }, "臺南市": { temp: 32, humidity: 56 }, "高雄市": { temp: 33, humidity: 52 } };
+    const mockData = { 
+      "臺北市": { temp: 32, humidity: 58 }, 
+      "新北市": { temp: 31, humidity: 60 }, 
+      "桃園市": { temp: 30, humidity: 62 }, 
+      "臺中市": { temp: 31, humidity: 55 }, 
+      "臺南市": { temp: 32, humidity: 56 }, 
+      "高雄市": { temp: 33, humidity: 52 } 
+    };
     weather = mockData[city.name] || { temp: 28, humidity: 60 };
     console.log(`   📦 使用類比資料: ${city.displayName}`);
   }
@@ -190,7 +286,12 @@ function calculateShockLevel(deltaRH, indoorHumidity) {
   }
   
   const finalLevel = Math.max(levelA, levelB);
-  const levelMap = { 1: { name: "低衝擊", color: "#00CC00", emoji: "🟢" }, 2: { name: "中衝擊", color: "#FFCC00", emoji: "🟡" }, 3: { name: "高衝擊", color: "#FF6600", emoji: "🟠" }, 4: { name: "危險衝擊", color: "#FF0000", emoji: "🔴" } };
+  const levelMap = { 
+    1: { name: "低衝擊", color: "#00CC00", emoji: "🟢" }, 
+    2: { name: "中衝擊", color: "#FFCC00", emoji: "🟡" }, 
+    3: { name: "高衝擊", color: "#FF6600", emoji: "🟠" }, 
+    4: { name: "危險衝擊", color: "#FF0000", emoji: "🔴" } 
+  };
   return { level: finalLevel, name: levelMap[finalLevel].name, color: levelMap[finalLevel].color, emoji: levelMap[finalLevel].emoji };
 }
 
@@ -222,7 +323,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// Flex Message
+// 第一頁：Flex Message（6都預報表格）
 // ==========================================
 async function generatePage1Flex() {
   const today = getDateString(0);
@@ -286,7 +387,7 @@ async function generatePage1Flex() {
 }
 
 // ==========================================
-// 第二頁：完整使用說明與保健建議
+// 第二頁：Flex Message（完整使用說明與保健建議）
 // ==========================================
 async function generatePage2Flex() {
   return {
@@ -309,8 +410,7 @@ async function generatePage2Flex() {
         layout: "vertical",
         spacing: "md",
         contents: [
-        
-          // ========== 1. 燈號意義 ==========
+          // 1. 燈號意義
           { type: "text", text: "🚦 燈號意義", weight: "bold", size: "sm" },
           { type: "text", text: "🟢 低衝擊", weight: "bold", size: "xs", color: "#00CC00" },
           { type: "text", text: "   維持日常基礎保養，正常清潔與保濕", size: "xs", color: "#666666", margin: "xs" },
@@ -323,7 +423,7 @@ async function generatePage2Flex() {
           { type: "text", text: "   避免非必要外出，立即調整室內環境，觀察皮膚反應", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
           
-          // ========== 2. 燈號判定邏輯 ==========
+          // 2. 燈號判定邏輯
           { type: "text", text: "📊 燈號判定邏輯", weight: "bold", size: "sm" },
           { type: "text", text: "Delta_RH = 今日濕度 - 昨日濕度（濕度變化幅度）", size: "xs", color: "#666666" },
           { type: "text", text: "RH_in = 室內推算濕度（依據工研院終極公式）", size: "xs", color: "#666666" },
@@ -332,7 +432,7 @@ async function generatePage2Flex() {
           { type: "text", text: "最終燈號 = 取兩路徑最高等級", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
           
-          // ========== 3. 室內濕度推算公式 ==========
+          // 3. 室內濕度推算公式
           { type: "text", text: "📐 室內濕度推算公式", weight: "bold", size: "sm" },
           { type: "text", text: "溫差 ΔT ≥ 5℃（連續強制冷卻）：", size: "xs", color: "#666666" },
           { type: "text", text: "RH_in = 0.82 × RH_out - 0.34 × ΔT - 16", size: "xs", color: "#666666" },
@@ -341,20 +441,20 @@ async function generatePage2Flex() {
           { type: "text", text: "溫差 < 2℃（雨天低溫高濕）：", size: "xs", color: "#666666" },
           { type: "text", text: "RH_in = RH_out - 5", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
-         // ========== 4. 查詢指令 ==========
+          
+          // 4. 查詢指令
           { type: "text", text: "🔍 查詢指令", weight: "bold", size: "sm" },
           { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "xs", color: "#666666" },
           { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
           
-          // ========== 5. 訂閱管理 ==========
+          // 5. 訂閱管理
           { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "sm" },
           { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "xs", color: "#666666" },
           { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "xs", color: "#666666" },
           { type: "separator", margin: "md" },
           
-   
-          // ========== 6. 文獻依據 ==========
+          // 6. 文獻依據
           { type: "text", text: "📖 文獻依據", weight: "bold", size: "sm" },
           { type: "text", text: "1. Denda et al. (2002) — 濕度突然下降會破壞皮膚屏障恆定", size: "xxs", color: "#999999", wrap: true },
           { type: "text", text: "2. 環境濕度與皮膚綜述 — 闡明低濕導致乾燥、粗糙", size: "xxs", color: "#999999", wrap: true },
@@ -377,23 +477,9 @@ async function generatePage2Flex() {
   };
 }
 
-
 // ==========================================
-// 訂閱與推播
+// 推播與回覆函數
 // ==========================================
-let subscribers = [];
-const SUBSCRIBERS_FILE = './subscribers.json';
-try {
-  if (fs.existsSync(SUBSCRIBERS_FILE)) {
-    subscribers = JSON.parse(fs.readFileSync(SUBSCRIBERS_FILE, 'utf8'));
-    console.log(`📋 載入 ${subscribers.length} 位訂閱用戶`);
-  }
-} catch(e) {}
-
-function saveSubscribers() {
-  fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(subscribers, null, 2));
-}
-
 async function pushToSubscribersBothPages(userId, page1, page2) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1, page2] }, {
@@ -450,7 +536,7 @@ async function replyTextMessage(replyToken, text) {
 }
 
 // ==========================================
-// Webhook
+// LINE Webhook
 // ==========================================
 app.post('/webhook', async (req, res) => {
   console.log('📨 收到 Webhook');
@@ -524,21 +610,34 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
+// ==========================================
+// 健康檢查端點
+// ==========================================
 app.get('/', (req, res) => {
   res.json({ status: 'ok', subscribers: subscribers.length, indoorTemp: INDOOR_TEMP });
 });
 app.get('/health', (req, res) => res.send('OK'));
 
+// ==========================================
+// 每日排程（台灣時間 7:00 = UTC 23:00）
+// ==========================================
 schedule.scheduleJob('0 23 * * *', () => {
   console.log(`📅 執行每日推播 - UTC: ${new Date().toISOString()}`);
+  console.log(`📅 執行每日推播 - 台灣: ${new Date(Date.now() + 8*60*60*1000).toLocaleString()}`);
   dailyPublishTask();
 });
 console.log('📅 每日推播：上午 7:00 (台灣時間)');
 
+// ==========================================
+// 啟動伺服器
+// ==========================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
+  console.log(`\n🚀 ========================================`);
+  console.log(`✅ Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
   console.log(`📡 預報 API：F-D0047-089`);
   console.log(`📅 每日推播：上午 7:00 (台灣時間)`);
+  console.log(`📋 訂閱用戶：${subscribers.length} 人`);
+  console.log(`========================================\n`);
 });
