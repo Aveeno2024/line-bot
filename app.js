@@ -378,7 +378,6 @@ async function generatePage1Flex() {
         type: "box",
         layout: "vertical",
         contents: [
-          // Icon 使用 emoji 代替
           { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "xl", color: "#ffffff" },
           { type: "text", text: `預報日期 ${today} ~ ${dayAfter}`, size: "sm", color: "#dddddd", margin: "xs" }
         ],
@@ -393,10 +392,10 @@ async function generatePage1Flex() {
           ...tableRows,
           { type: "separator", margin: "md" },
           { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🟢 低衝擊", size: "xxs", color: "#00CC00", flex: 1, align: "center" },
-            { type: "text", text: "🟡 中衝擊", size: "xxs", color: "#FFCC00", flex: 1, align: "center" },
-            { type: "text", text: "🟠 高衝擊", size: "xxs", color: "#FF6600", flex: 1, align: "center" },
-            { type: "text", text: "🔴 危險衝擊", size: "xxs", color: "#FF0000", flex: 1, align: "center" }
+            { type: "text", text: "🟢 低衝擊", size: "xs", color: "#00CC00", flex: 1, align: "center" },
+            { type: "text", text: "🟡 中衝擊", size: "xs", color: "#FFCC00", flex: 1, align: "center" },
+            { type: "text", text: "🟠 高衝擊", size: "xs", color: "#FF6600", flex: 1, align: "center" },
+            { type: "text", text: "🔴 危險衝擊", size: "xs", color: "#FF0000", flex: 1, align: "center" }
           ]}
         ],
         paddingAll: "20px"
@@ -407,17 +406,16 @@ async function generatePage1Flex() {
         spacing: "xs",
         contents: [
           { type: "separator" },
-          { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "xxs", color: "#999999", align: "center" },
-          { type: "text", text: "📊 數據來源：中央氣象署", size: "xxs", color: "#999999", align: "center" },
-          { type: "text", text: "📖 科學依據：詳見 AMDS 官網查看燈號說明及建議", size: "xxs", color: "#999999", align: "center" },
-          { type: "button", style: "link", height: "sm", action: { type: "message", label: "📋 查看詳細說明", text: "詳細說明" }, margin: "md", color: "#667eea" }
+          { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "sm", color: "#999999", align: "center" },
+          { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
+          { type: "text", text: "📖 科學依據：詳見 AMDS 官網", size: "sm", color: "#999999", align: "center" },
+          { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
         ],
         paddingAll: "12px"
       }
     }
   };
 }
-
 // ==========================================
 // 第二頁：完整使用說明與保健建議
 // ==========================================
