@@ -3,6 +3,7 @@ const axios = require('axios');
 const fs = require('fs');
 const app = express();
 app.use(express.json());
+
 // ==========================================
 // 啟用 CORS（允許網站跨域請求）
 // ==========================================
@@ -15,6 +16,7 @@ app.use((req, res, next) => {
   }
   next();
 });
+
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
@@ -600,6 +602,49 @@ setInterval(() => {
 console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
 
 // ==========================================
+// 網站 API：取得全台6都摘要
+// ==========================================
+app.get('/api/all-cities-summary', async (req, res) => {
+  try {
+    const results = [];
+    
+    for (const city of CITIES) {
+      const weather = await getWeather(city, 0);
+      const indoorHumidity = calculateIndoorHumidity(weather.temp, weather.humidity);
+      const deltaRH = 0;
+      const shock = calculateShockLevel(deltaRH, indoorHumidity);
+      
+      results.push({
+        city: city.displayName,
+        tempOut: weather.temp,
+        humOut: weather.humidity,
+        indoorHumidity: indoorHumidity,
+        shockLevel: shock.name,
+        shockEmoji: shock.emoji,
+        shockColor: shock.color
+      });
+    }
+    
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('API錯誤:', error);
+    res.json({ success: false, message: error.message });
+  }
+});
+
+// ==========================================
+// 健康檢查端點
+// ==========================================
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', subscribers: subscribers.length, indoorTemp: INDOOR_TEMP });
+});
+
+app.get('/health', (req, res) => {
+  console.log(`💓 健康檢查 - ${new Date().toLocaleString()}`);
+  res.status(200).send('OK');
+});
+
+// ==========================================
 // LINE Webhook
 // ==========================================
 app.post('/webhook', async (req, res) => {
@@ -618,7 +663,6 @@ app.post('/webhook', async (req, res) => {
       
       console.log(`📱 來源: ${sourceType}, ID: ${sourceId}`);
       
-      // Bot 被加入群組
       if (event.type === 'join') {
         const groupId = event.source?.groupId;
         if (groupId && !groups.includes(groupId)) {
@@ -637,13 +681,11 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 用戶加入 Bot（個人）- 修改為簡短歡迎訊息
       if (event.type === 'follow') {
         if (!subscribers.includes(userId)) {
           subscribers.push(userId);
           saveSubscribers();
           console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
-          // 修改為簡短的歡迎訊息，而不是直接顯示全台預報
           await replyTextMessage(replyToken, 
             `🎉 歡迎加入【皮膚濕度壓力指數】！
 
@@ -664,7 +706,6 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 用戶封鎖 Bot
       if (event.type === 'unfollow') {
         const idx = subscribers.indexOf(userId);
         if (idx !== -1) {
@@ -675,12 +716,10 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 處理文字訊息
       if (event.type === 'message' && event.message.type === 'text') {
         const input = event.message.text.trim();
         console.log(`📱 輸入: "${input}"`);
         
-        // 取消訂閱
         if (input === '取消訂閱') {
           const idx = subscribers.indexOf(userId);
           if (idx !== -1) {
@@ -693,7 +732,6 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 加入訂閱
         if (input === '加入訂閱') {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
@@ -705,14 +743,12 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 詳細說明
         if (input === '詳細說明') {
           const page2 = await generatePage2Flex();
           await replyFlexMessage(replyToken, page2);
           continue;
         }
         
-        // 全台查詢
         if (input === '全台' || input === 'ALL') {
           const page1 = await generatePage1Flex();
           const page2 = await generatePage2Flex();
@@ -720,7 +756,6 @@ app.post('/webhook', async (req, res) => {
           if (sourceType === 'user') {
             await replyBothFlexMessages(replyToken, page1, page2);
           } else {
-            // 群組處理
             const now = Date.now();
             const lastTime = lastQueryTime[sourceId] || 0;
             
@@ -741,7 +776,6 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 預設回應
         const page1 = await generatePage1Flex();
         if (sourceType === 'user') {
           await replyFlexMessage(replyToken, page1);
@@ -756,18 +790,6 @@ app.post('/webhook', async (req, res) => {
   } catch (err) {
     console.error('處理錯誤:', err);
   }
-});
-
-// ==========================================
-// 健康檢查端點
-// ==========================================
-app.get('/', (req, res) => {
-  res.json({ status: 'ok', subscribers: subscribers.length, indoorTemp: INDOOR_TEMP });
-});
-
-app.get('/health', (req, res) => {
-  console.log(`💓 健康檢查 - ${new Date().toLocaleString()}`);
-  res.status(200).send('OK');
 });
 
 // ==========================================
