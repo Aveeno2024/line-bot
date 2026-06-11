@@ -602,7 +602,7 @@ setInterval(() => {
 console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
 
 // ==========================================
-// 網站 API：取得全台6都摘要
+// 網站 API：取得全台6都摘要（當天）
 // ==========================================
 app.get('/api/all-cities-summary', async (req, res) => {
   try {
@@ -633,6 +633,32 @@ app.get('/api/all-cities-summary', async (req, res) => {
 });
 
 // ==========================================
+// 網站 API：取得全台6都3天預報
+// ==========================================
+app.get('/api/all-cities-3days', async (req, res) => {
+  try {
+    const results = [];
+    
+    for (const city of CITIES) {
+      const threeDays = await calculateCityThreeDays(city);
+      results.push({
+        city: city.displayName,
+        days: threeDays.days.map(day => ({
+          shockLevel: day.shock.name,
+          shockEmoji: day.shock.emoji,
+          shockColor: day.shock.color
+        }))
+      });
+    }
+    
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('API錯誤:', error);
+    res.json({ success: false, message: error.message });
+  }
+});
+
+// ==========================================
 // 健康檢查端點
 // ==========================================
 app.get('/', (req, res) => {
@@ -644,13 +670,8 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// 測試用 API
 app.get('/api/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'API 正常運作',
-    time: new Date().toISOString()
-  });
+  res.json({ success: true, message: 'API 正常運作', time: new Date().toISOString() });
 });
 
 // ==========================================
