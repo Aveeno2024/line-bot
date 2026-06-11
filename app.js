@@ -3,7 +3,18 @@ const axios = require('axios');
 const fs = require('fs');
 const app = express();
 app.use(express.json());
-
+// ==========================================
+// 啟用 CORS（允許網站跨域請求）
+// ==========================================
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
