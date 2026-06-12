@@ -143,7 +143,7 @@ const CITIES = [
 ];
 
 // ==========================================
-// 濕度歷史紀錄（保留用於其他用途）
+// 濕度歷史紀錄
 // ==========================================
 try {
   if (fs.existsSync(HUMIDITY_HISTORY_FILE)) {
@@ -159,7 +159,7 @@ function saveHumidityHistory() {
 
 // ==========================================
 // 中央氣象署 API - 獲取指定時間點的預報資料
-// 取樣時間：使用 14:00 的單點預報數據
+// 取樣時間：每6小時一次（02, 08, 14, 20）
 // ==========================================
 
 // 獲取指定城市、指定日期、指定時間的預報資料
@@ -287,8 +287,8 @@ async function getCurrentWeather(city) {
 }
 
 // 獲取天氣資料（優先使用預報 API）
-async function getWeather(city, dateOffset = 0) {
-  let weather = await getForecastAtTime(city, dateOffset, 14);
+async function getWeather(city, dateOffset = 0, targetHour = 14) {
+  let weather = await getForecastAtTime(city, dateOffset, targetHour);
   if (!weather && dateOffset === 0) {
     weather = await getCurrentWeather(city);
   }
@@ -337,13 +337,10 @@ function calculateIndoorHumidity(tempOut, humOut) {
 
 // ==========================================
 // 皮膚濕度壓力指數燈號判定（依優先級順序）
-// ΔRH = 室外相對濕度 - 室內推算濕度
+// Gap = 室外相對濕度 - 室內推算濕度
 // ==========================================
 function calculateShockLevel(humOut, indoorHumidity) {
-  // 計算濕度變化幅度 Gap = 室外濕度 - 室內推算濕度
   const gap = humOut - indoorHumidity;
-  
-  // 依優先級順序檢查（由上到下，符合即輸出）
   
   // 🔴 條件1：RH_in ≤ 15（極端乾燥警戒）
   if (indoorHumidity <= 15) {
@@ -365,7 +362,7 @@ function calculateShockLevel(humOut, indoorHumidity) {
     return { level: 3, name: "高衝擊", color: "#FF6600", emoji: "🟠" };
   }
   
-  // 🟠 條件5：RH_in ≤ 30（重度乾燥，夏季冷氣房常見）
+  // 🟠 條件5：RH_in ≤ 30（重度乾燥）
   if (indoorHumidity <= 30) {
     return { level: 3, name: "高衝擊", color: "#FF6600", emoji: "🟠" };
   }
@@ -375,12 +372,12 @@ function calculateShockLevel(humOut, indoorHumidity) {
     return { level: 3, name: "高衝擊", color: "#FF6600", emoji: "🟠" };
   }
   
-  // 🟡 條件7：Gap ≤ 15 且 (RH_in ≥ 70 或 RH_in ≤ 40)（較溫和的乾燥/潮濕）
+  // 🟡 條件7：Gap ≤ 15 且 (RH_in ≥ 70 或 RH_in ≤ 40)
   if (gap <= 15 && (indoorHumidity >= 70 || indoorHumidity <= 40)) {
     return { level: 2, name: "中衝擊", color: "#FFCC00", emoji: "🟡" };
   }
   
-  // 🟢 條件8：其他（舒適區）
+  // 🟢 條件8：其他
   return { level: 1, name: "低衝擊", color: "#00CC00", emoji: "🟢" };
 }
 
@@ -404,10 +401,10 @@ function calculateDailyIndex(weather) {
 // ==========================================
 // 計算城市連續3天指數（取樣時間 14:00）
 // ==========================================
-async function calculateCityThreeDays(city) {
-  const weather0 = await getWeather(city, 0);  // 今天 14:00
-  const weather1 = await getWeather(city, 1);  // 明天 14:00
-  const weather2 = await getWeather(city, 2);  // 後天 14:00
+async function calculateCityThreeDays(city, targetHour = 14) {
+  const weather0 = await getWeather(city, 0, targetHour);
+  const weather1 = await getWeather(city, 1, targetHour);
+  const weather2 = await getWeather(city, 2, targetHour);
   
   const day0 = calculateDailyIndex(weather0);
   const day1 = calculateDailyIndex(weather1);
@@ -427,17 +424,31 @@ function getDateString(offset = 0) {
   return `${date.getMonth()+1}/${date.getDate()}`;
 }
 
+// 獲取當前時段說明
+function getCurrentPeriod() {
+  const hour = new Date().getHours();
+  if (hour >= 2 && hour < 8) return '凌晨2點';
+  if (hour >= 8 && hour < 14) return '早上8點';
+  if (hour >= 14 && hour < 20) return '下午2點';
+  return '晚上8點';
+}
+
 // ==========================================
 // 第一頁：Flex Message（6都預報表格）
 // ==========================================
-async function generatePage1Flex() {
+async function generatePage1Flex(targetHour = 14) {
   const today = getDateString(0);
   const tomorrow = getDateString(1);
   const dayAfter = getDateString(2);
   const citiesData = [];
   
+  // 取得時段說明
+  const periodText = targetHour === 2 ? '凌晨2點' : 
+                     targetHour === 8 ? '早上8點' : 
+                     targetHour === 14 ? '下午2點' : '晚上8點';
+  
   for (const city of CITIES) {
-    citiesData.push(await calculateCityThreeDays(city));
+    citiesData.push(await calculateCityThreeDays(city, targetHour));
   }
   
   const tableRows = [
@@ -472,7 +483,7 @@ async function generatePage1Flex() {
         layout: "vertical",
         contents: [
           { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "lg", color: "#ffffff" },
-          { type: "text", text: `預報日期 ${today} ~ ${dayAfter} (下午2點數據)`, size: "sm", color: "#dddddd", margin: "xs" }
+          { type: "text", text: `預報日期 ${today} ~ ${dayAfter} (${periodText}數據)`, size: "sm", color: "#dddddd", margin: "xs" }
         ],
         backgroundColor: "#667eea",
         paddingAll: "20px"
@@ -502,7 +513,7 @@ async function generatePage1Flex() {
         contents: [
           { type: "separator" },
           { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "sm", color: "#999999", align: "center" },
-          { type: "text", text: "📊 數據來源：中央氣象署 (下午2點預報)", size: "sm", color: "#999999", align: "center" },
+          { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
           { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
         ],
         paddingAll: "12px"
@@ -560,7 +571,15 @@ async function generatePage2Flex() {
           
           { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "md" },
           { type: "text", text: "• 輸入「加入訂閱」開啟每日推播（每天上午 7:00）", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "sm", color: "#666666", wrap: true }
+          { type: "text", text: "• 輸入「取消訂閱」關閉每日推播", size: "sm", color: "#666666", wrap: true },
+          { type: "separator", margin: "md" },
+          
+          { type: "text", text: "📖 燈號判定邏輯", weight: "bold", size: "sm" },
+          { type: "text", text: "Gap = 室外濕度 - 室內推算濕度", size: "xs", color: "#666666", wrap: true },
+          { type: "text", text: "🔴 RH_in ≤15 或 ≥85，或 Gap≥30 且 RH_in<45", size: "xs", color: "#FF0000", wrap: true },
+          { type: "text", text: "🟠 RH_in ≥80 或 ≤30，或 15≤Gap<35 且 RH_in<45", size: "xs", color: "#FF6600", wrap: true },
+          { type: "text", text: "🟡 Gap ≤15 且 (RH_in ≥70 或 ≤40)", size: "xs", color: "#FFCC00", wrap: true },
+          { type: "text", text: "🟢 其他情況", size: "xs", color: "#00CC00", wrap: true }
         ],
         paddingAll: "20px"
       },
@@ -583,26 +602,41 @@ async function generatePage2Flex() {
 // 快取管理函數
 // ==========================================
 
+// 獲取當前時段對應的目標小時
+function getTargetHour() {
+  const now = new Date();
+  const hour = now.getHours();
+  
+  // 根據當前時間決定使用哪個時段的預報
+  // 02:10 之後用凌晨2點數據，08:10之後用早上8點數據，以此類推
+  if (hour >= 2 && hour < 8) return 2;
+  if (hour >= 8 && hour < 14) return 8;
+  if (hour >= 14 && hour < 20) return 14;
+  return 20;
+}
+
 async function precomputeAndCache() {
-  console.log(`\n🔄 開始預計算快取 - ${new Date().toLocaleString()}`);
+  const targetHour = getTargetHour();
+  console.log(`\n🔄 開始預計算快取 - ${new Date().toLocaleString()} (時段: ${targetHour}:00)`);
   const startTime = Date.now();
   
   try {
-    const page1 = await generatePage1Flex();
+    const page1 = await generatePage1Flex(targetHour);
     const page2 = await generatePage2Flex();
     
-    cachedForecast = { page1, page2 };
+    cachedForecast = { page1, page2, targetHour };
     lastCacheTime = new Date();
     
     const cacheData = {
       page1: page1,
       page2: page2,
+      targetHour: targetHour,
       lastCacheTime: lastCacheTime.toISOString()
     };
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
     
     const duration = Date.now() - startTime;
-    console.log(`✅ 快取預計算完成，耗時 ${duration}ms`);
+    console.log(`✅ 快取預計算完成，耗時 ${duration}ms (時段: ${targetHour}:00)`);
   } catch (error) {
     console.error('❌ 預計算失敗:', error);
   }
@@ -613,9 +647,9 @@ function loadCacheFromFile() {
     if (fs.existsSync(CACHE_FILE)) {
       const data = fs.readFileSync(CACHE_FILE, 'utf8');
       const cache = JSON.parse(data);
-      cachedForecast = { page1: cache.page1, page2: cache.page2 };
+      cachedForecast = { page1: cache.page1, page2: cache.page2, targetHour: cache.targetHour };
       lastCacheTime = new Date(cache.lastCacheTime);
-      console.log(`📦 從檔案載入快取成功，時間: ${lastCacheTime.toLocaleString()}`);
+      console.log(`📦 從檔案載入快取成功，時間: ${lastCacheTime.toLocaleString()}, 時段: ${cache.targetHour}:00`);
       return true;
     }
   } catch (error) {
@@ -631,6 +665,7 @@ async function getCachedForecast() {
     return cachedForecast;
   }
   
+  // 檢查快取是否超過 8 小時
   if (lastCacheTime && (Date.now() - lastCacheTime.getTime() > 8 * 60 * 60 * 1000)) {
     console.log('⚠️ 快取已超過 8 小時，重新預計算');
     await precomputeAndCache();
@@ -645,7 +680,7 @@ async function getCachedForecast() {
 // ==========================================
 async function pushToUser(userId, page1, page2) {
   try {
-    await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1, page2] }, {
+    await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1] }, {
       headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
     console.log(`✅ 推播成功: ${userId}`);
@@ -661,7 +696,7 @@ async function dailyPublishTask() {
   
   const cache = await getCachedForecast();
   
-  if (cache && cache.page1 && cache.page2) {
+  if (cache && cache.page1) {
     console.log(`📤 推播給 ${subscribers.length} 位個人訂閱者`);
     for (const userId of subscribers) {
       await pushToUser(userId, cache.page1, cache.page2);
@@ -709,7 +744,7 @@ async function replyTextMessage(replyToken, text) {
 
 async function sendPrivateMessage(userId, page1, page2) {
   try {
-    await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1, page2] }, {
+    await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1] }, {
       headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
     console.log(`✅ 私訊發送成功: ${userId}`);
@@ -795,8 +830,8 @@ app.post('/webhook', async (req, res) => {
           console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
           
           const cache = await getCachedForecast();
-          if (cache && cache.page1 && cache.page2) {
-            await replyBothFlexMessages(replyToken, cache.page1, cache.page2);
+          if (cache && cache.page1) {
+            await replyFlexMessage(replyToken, cache.page1);
           } else {
             await replyTextMessage(replyToken, 
               `🎉 歡迎加入【皮膚濕度壓力指數】！
@@ -863,9 +898,9 @@ app.post('/webhook', async (req, res) => {
         if (input === '全台' || input === 'ALL') {
           const cache = await getCachedForecast();
           
-          if (cache && cache.page1 && cache.page2) {
+          if (cache && cache.page1) {
             if (sourceType === 'user') {
-              await replyBothFlexMessages(replyToken, cache.page1, cache.page2);
+              await replyFlexMessage(replyToken, cache.page1);
             } else {
               const now = Date.now();
               const lastTime = lastQueryTime[sourceId] || 0;
@@ -915,7 +950,9 @@ app.post('/webhook', async (req, res) => {
 
 loadCacheFromFile();
 
-// 定時任務：台灣時間 02:10, 08:10, 14:10, 20:10
+// 定時任務：每6小時一次，在發布後10分鐘執行
+// 台灣時間 02:10, 08:10, 14:10, 20:10
+// UTC 時間：前一天 18:10, 00:10, 06:10, 12:10
 schedule.scheduleJob('10 18,0,6,12 * * *', () => {
   console.log(`\n⏰ 定時任務觸發 - 開始預計算`);
   precomputeAndCache();
@@ -936,11 +973,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 ========================================`);
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
-  console.log(`📡 預報 API：F-D0047-089 (取樣時間: 下午2點單點預報)`);
-  console.log(`📊 ΔRH 定義：室外濕度 - 室內推算濕度`);
+  console.log(`📡 預報 API：F-D0047-089`);
+  console.log(`📊 取樣時段：每天 02:00, 08:00, 14:00, 20:00`);
+  console.log(`⏰ 預計算時間：發布後10分鐘 (02:10, 08:10, 14:10, 20:10)`);
   console.log(`📅 每日推播：上午 7:00 (台灣時間)`);
-  console.log(`⏰ 定時預計算：每天 02:10, 08:10, 14:10, 20:10 (台灣時間)`);
   console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
+  if (cachedForecast) console.log(`📅 快取時段：${cachedForecast.targetHour}:00`);
   console.log(`📋 個人訂閱：${subscribers.length} 人`);
   console.log(`👥 群組數量：${groups.length} 個`);
   console.log(`========================================\n`);
