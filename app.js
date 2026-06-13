@@ -858,19 +858,10 @@ app.post('/webhook', async (req, res) => {
     console.error('處理錯誤:', err);
   }
 });
-
 // ==========================================
 // 啟動伺服器
 // ==========================================
-
-// 載入訂閱資料
-loadFromGitHub();
-
-// 載入快取
-loadCacheFromFile();
-
-// 定時任務：每天 14:10 執行
-// 中央氣象署 14:00 發布，10分鐘後抓取
+// 定時任務：每天 14:10 執行（UTC 06:10）
 schedule.scheduleJob('10 6 * * *', () => {
   console.log(`\n⏰ 定時任務觸發 - 開始預計算`);
   precomputeAndCache();
@@ -878,21 +869,33 @@ schedule.scheduleJob('10 6 * * *', () => {
 
 console.log('📅 已設定定時預計算任務：每天 14:10 (台灣時間)');
 
-// 啟動時執行一次預計算（如果快取不存在）
-if (!cachedForecast) {
-  console.log('🚀 啟動時無快取，立即執行預計算');
-  precomputeAndCache();
-}
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 ========================================`);
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
-  console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
-  console.log(`⏰ 預計算時間：每天 14:10 (台灣時間)`);
-  console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
-  console.log(`📋 個人訂閱：${subscribers.length} 人`);
-  console.log(`👥 群組數量：${groups.length} 個`);
-  console.log(`========================================\n`);
-});
+// 使用 IIFE 確保非同步載入完成後才啟動伺服器
+(async () => {
+  // 先載入訂閱資料
+  await loadFromGitHub();
+  
+  // 載入快取
+  loadCacheFromFile();
+  
+  // 啟動時執行一次預計算（如果快取不存在）
+  if (!cachedForecast) {
+    console.log('🚀 啟動時無快取，立即執行預計算');
+    await precomputeAndCache();
+  } else if (lastCacheTime && (Date.now() - lastCacheTime.getTime() > 24 * 60 * 60 * 1000)) {
+    console.log('⚠️ 快取已超過 24 小時，重新預計算');
+    await precomputeAndCache();
+  }
+  
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`\n🚀 ========================================`);
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
+    console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
+    console.log(`⏰ 預計算時間：每天 14:10 (台灣時間)`);
+    console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
+    console.log(`📋 個人訂閱：${subscribers.length} 人`);
+    console.log(`👥 群組數量：${groups.length} 個`);
+    console.log(`========================================\n`);
+  });
+})();
