@@ -452,7 +452,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// 錯誤訊息 Flex Message（API 無法連線時顯示）
+// 錯誤訊息 Flex Message（全部 API 無法連線時顯示）
 // ==========================================
 function getErrorFlexMessage() {
   const today = getDateString(0);
@@ -528,7 +528,6 @@ async function generatePage1Flex() {
   let hasError = false;
   
   for (const cityData of citiesData) {
-    // 檢查是否有任何一天無資料
     if (cityData.days.some(day => day.shock.level === 0)) {
       hasError = true;
     }
@@ -688,11 +687,9 @@ async function precomputeAndCache() {
   const startTime = Date.now();
   
   try {
-    // 直接生成 Flex Message（內部會處理 API 失敗，顯示❓）
     const page1 = await generatePage1Flex();
     const page2 = await generatePage2Flex();
     
-    // 只要成功生成，就儲存快取
     cachedForecast = { page1, page2 };
     lastCacheTime = new Date();
     
@@ -995,10 +992,38 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ==========================================
-// 啟動伺服器
+// 每日推播檢查機制（每分鐘檢查，最穩定）
 // ==========================================
 
-// 定時任務：每天 14:10 執行（UTC 06:10）
+let lastPublishDate = null;
+
+function checkAndPublish() {
+  const now = new Date();
+  const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const hours = taiwanTime.getUTCHours();
+  const minutes = taiwanTime.getUTCMinutes();
+  
+  // 早上 7:00 觸發（每分鐘檢查，確保不會錯過）
+  if (hours === 7 && minutes === 0) {
+    const today = taiwanTime.toISOString().split('T')[0];
+    if (lastPublishDate !== today) {
+      console.log(`📅 觸發每日推播 - ${today} 台灣時間 ${hours}:${minutes}`);
+      lastPublishDate = today;
+      dailyPublishTask();
+    }
+  }
+}
+
+// 每分鐘檢查一次
+setInterval(() => {
+  checkAndPublish();
+}, 60 * 1000);
+
+console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
+
+// ==========================================
+// 定時預計算任務（每天 14:10 台灣時間 = UTC 06:10）
+// ==========================================
 schedule.scheduleJob('10 6 * * *', () => {
   console.log(`\n⏰ 定時任務觸發 - 開始預計算`);
   precomputeAndCache();
@@ -1006,7 +1031,9 @@ schedule.scheduleJob('10 6 * * *', () => {
 
 console.log('📅 已設定定時預計算任務：每天 14:10 (台灣時間)');
 
-// 使用 IIFE 確保非同步載入完成後才啟動伺服器
+// ==========================================
+// 啟動伺服器
+// ==========================================
 (async () => {
   // 先載入訂閱資料
   await loadFromGitHub();
@@ -1030,6 +1057,7 @@ console.log('📅 已設定定時預計算任務：每天 14:10 (台灣時間)')
     console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
     console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
     console.log(`⏰ 預計算時間：每天 14:10 (台灣時間)`);
+    console.log(`🕐 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
     console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
     console.log(`👥 群組數量：${groups.length} 個`);
