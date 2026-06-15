@@ -1,7 +1,7 @@
 {
   "name": "skin-humidity-index-bot",
   "version": "2.0.0",
-  "description": "皮膚濕度衝擊指數 LINE Bot",
+  "description": "皮膚濕度壓力指數 LINE Bot",
   "main": "app.js",
   "scripts": {
     "start": "node app.js"
@@ -9,7 +9,7 @@
   "dependencies": {
     "express": "^4.18.2",
     "axios": "^1.6.0",
-    "node-schedule": "^2.1.1"
+    "node-cron": "^3.0.3"
   },
   "engines": {
     "node": ">=16.0.0"
