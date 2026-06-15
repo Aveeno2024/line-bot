@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
-const schedule = require('node-schedule');
+const cron = require('node-cron');
 const app = express();
 app.use(express.json());
 
@@ -284,16 +284,13 @@ async function getCurrentWeather(city) {
 }
 
 async function getWeather(city, dateOffset = 0, targetHour = 14) {
-  // 優先使用預報 API
   let weather = await getForecastAtTime(city, dateOffset, targetHour);
   
-  // 如果預報 API 失敗且是當天，嘗試即時觀測 API
   if (!weather && dateOffset === 0) {
     console.log(`⚠️ 預報API失敗，嘗試使用即時觀測API`);
     weather = await getCurrentWeather(city);
   }
   
-  // 如果還是失敗，返回 null（不使用類比資料）
   if (!weather) {
     console.log(`❌ ${city.displayName} 所有 API 都失敗，標記為暫無資料`);
     return null;
@@ -452,7 +449,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// 錯誤訊息 Flex Message（全部 API 無法連線時顯示）
+// 錯誤訊息 Flex Message
 // ==========================================
 function getErrorFlexMessage() {
   const today = getDateString(0);
@@ -503,7 +500,7 @@ function getErrorFlexMessage() {
 }
 
 // ==========================================
-// 第一頁：Flex Message（6都預報表格）
+// 第一頁：Flex Message
 // ==========================================
 async function generatePage1Flex() {
   const today = getDateString(0);
@@ -992,7 +989,7 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ==========================================
-// 每日推播檢查機制（每分鐘檢查，最穩定）
+// 每日推播檢查機制（每分鐘檢查）
 // ==========================================
 
 let lastPublishDate = null;
@@ -1003,7 +1000,6 @@ function checkAndPublish() {
   const hours = taiwanTime.getUTCHours();
   const minutes = taiwanTime.getUTCMinutes();
   
-  // 早上 7:00 觸發（每分鐘檢查，確保不會錯過）
   if (hours === 7 && minutes === 0) {
     const today = taiwanTime.toISOString().split('T')[0];
     if (lastPublishDate !== today) {
@@ -1014,7 +1010,6 @@ function checkAndPublish() {
   }
 }
 
-// 每分鐘檢查一次
 setInterval(() => {
   checkAndPublish();
 }, 60 * 1000);
@@ -1022,11 +1017,13 @@ setInterval(() => {
 console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
 
 // ==========================================
-// 定時預計算任務（每天 14:10 台灣時間 = UTC 06:10）
+// 定時預計算任務（每天台灣時間 14:10）
 // ==========================================
-schedule.scheduleJob('10 6 * * *', () => {
+cron.schedule('10 14 * * *', () => {
   console.log(`\n⏰ 定時任務觸發 - 開始預計算`);
   precomputeAndCache();
+}, {
+  timezone: "Asia/Taipei"
 });
 
 console.log('📅 已設定定時預計算任務：每天 14:10 (台灣時間)');
@@ -1035,13 +1032,9 @@ console.log('📅 已設定定時預計算任務：每天 14:10 (台灣時間)')
 // 啟動伺服器
 // ==========================================
 (async () => {
-  // 先載入訂閱資料
   await loadFromGitHub();
-  
-  // 載入快取
   loadCacheFromFile();
   
-  // 啟動時執行一次預計算（如果快取不存在）
   if (!cachedForecast) {
     console.log('🚀 啟動時無快取，立即執行預計算');
     await precomputeAndCache();
