@@ -241,7 +241,8 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
       console.log(`✅ API 連線成功`);
       return {
         temp: Math.round(parseFloat(tempValue)),
-        humidity: Math.round(parseFloat(humValue))
+        humidity: Math.round(parseFloat(humValue)),
+        dataTime: `${targetDateStr} ${targetHour}:00`
       };
     }
     
@@ -272,7 +273,12 @@ async function getCurrentWeather(city) {
         const humidity = Math.round(parseFloat(matched.WeatherElement.RelativeHumidity));
         console.log(`📊 原始數據: 溫度=${temp}℃, 濕度=${humidity}%`);
         console.log(`✅ 即時觀測成功`);
-        return { temp, humidity };
+        const now = new Date();
+        const timeStr = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+        return {
+          temp, humidity,
+          dataTime: timeStr + " (即時觀測)"
+        };
       }
     }
     console.log(`❌ 找不到 ${city.name} 的即時觀測資料`);
@@ -387,6 +393,7 @@ function calculateDailyIndex(weather) {
       humOut: null,
       indoorHumidity: null,
       gap: null,
+      dataTime: null,
       shock: { level: 0, name: "暫無資料", color: "#999999", emoji: "❓" }
     };
   }
@@ -408,6 +415,7 @@ function calculateDailyIndex(weather) {
     humOut: weather.humidity,
     indoorHumidity: indoorHumidity,
     gap: gap,
+    dataTime: weather.dataTime,
     shock: shock
   };
 }
@@ -428,6 +436,9 @@ async function calculateCityThreeDays(city, targetHour = 14) {
   console.log(`\n📅 第3天 (後天):`);
   const day2 = calculateDailyIndex(weather2);
   
+  // 獲取資料時間（從第一天取得）
+  let dataTime = day0.dataTime || null;
+  
   const hasData = day0.shock.level !== 0 || day1.shock.level !== 0 || day2.shock.level !== 0;
   if (!hasData) {
     console.log(`⚠️ ${city.displayName} 完全無資料`);
@@ -438,7 +449,8 @@ async function calculateCityThreeDays(city, targetHour = 14) {
   
   return {
     city: city.displayName,
-    days: [day0, day1, day2]
+    days: [day0, day1, day2],
+    dataTime: dataTime
   };
 }
 
@@ -500,7 +512,7 @@ function getErrorFlexMessage() {
 }
 
 // ==========================================
-// 第一頁：Flex Message
+// 第一頁：Flex Message（6都預報表格）
 // ==========================================
 async function generatePage1Flex() {
   const today = getDateString(0);
@@ -508,8 +520,16 @@ async function generatePage1Flex() {
   const dayAfter = getDateString(2);
   const citiesData = [];
   
+  let globalDataTime = null;
+  
   for (const city of CITIES) {
-    citiesData.push(await calculateCityThreeDays(city, 14));
+    const threeDays = await calculateCityThreeDays(city, 14);
+    citiesData.push(threeDays);
+    
+    // 記錄第一個有效的資料時間
+    if (!globalDataTime && threeDays.dataTime) {
+      globalDataTime = threeDays.dataTime;
+    }
   }
   
   const tableRows = [
@@ -539,8 +559,12 @@ async function generatePage1Flex() {
     });
   }
   
+  // 資料時間顯示
+  const dataTimeStr = globalDataTime || new Date().toLocaleString();
+  
   const footerContents = [
     { type: "separator" },
+    { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "xs", color: "#999999", align: "center" },
     { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "sm", color: "#999999", align: "center" }
   ];
   
@@ -556,7 +580,7 @@ async function generatePage1Flex() {
   }
   
   footerContents.push(
-    { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
+    { type: "text", text: "📊 數據來源：中央氣象署", size: "xs", color: "#999999", align: "center" },
     { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
   );
   
