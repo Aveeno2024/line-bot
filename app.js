@@ -133,6 +133,7 @@ function saveSubscribers() {
 // 室內環境設定
 // ==========================================
 const INDOOR_TEMP = 26;
+const ES_26 = 3.36; // 26℃ 飽和水蒸氣壓 (kPa)
 
 const CITIES = [
   { code: "1", name: "臺北市", displayName: "臺北市", apiName: "臺北市" },
@@ -156,6 +157,97 @@ try {
 
 function saveHumidityHistory() {
   fs.writeFileSync(HUMIDITY_HISTORY_FILE, JSON.stringify(humidityHistory, null, 2));
+}
+
+// ==========================================
+// SHPI V3 核心計算函數（與 VBA 版本一致）
+// ==========================================
+
+/**
+ * Tetens 公式：計算飽和水蒸氣壓
+ * e_s(T) = 0.6112 * exp(17.67 * T / (T + 243.5))
+ */
+function calcSaturationVaporPressure(temp) {
+  return 0.6112 * Math.exp((17.67 * temp) / (temp + 243.5));
+}
+
+/**
+ * 計算室內穩態水蒸氣壓 e_in
+ * e_in = 1.70 + 0.06*(T_out - 28) + 0.004*(RH_out - 50)
+ * 限制在 1.45 ~ 2.20 之間
+ */
+function calcIndoorVaporPressure(tempOut, humOut) {
+  let e_in = 1.70 + 0.06 * (tempOut - 28) + 0.004 * (humOut - 50);
+  if (e_in < 1.45) e_in = 1.45;
+  if (e_in > 2.20) e_in = 2.20;
+  return e_in;
+}
+
+/**
+ * 計算乾燥指數 DI = 100 - RH_in
+ * RH_in = 100 * e_in / 3.36
+ */
+function calcDI(e_in) {
+  const RH_in = 100 * e_in / ES_26;
+  return 100 - RH_in;
+}
+
+/**
+ * 燈號判定（與 VBA 版本完全一致）
+ * 🟢 綠燈：Δe < 0.8 且 DI < 44
+ * 🟡 黃燈：0.8 ≤ Δe < 1.2 或 44 ≤ DI < 52
+ * 🟠 橘燈：1.2 ≤ Δe < 1.6 或 52 ≤ DI < 58
+ * 🔴 紅燈：Δe ≥ 1.6 或 DI ≥ 58
+ */
+function getLightLevel(delta_e, di) {
+  // 🔴 紅燈：最高優先級
+  if (delta_e >= 1.6 || di >= 58) {
+    return { level: 4, name: "紅燈", emoji: "🔴", color: "#FF0000", bgColor: "#FF0000", textColor: "#FFFFFF" };
+  }
+  // 🟠 橘燈
+  if ((delta_e >= 1.2 && delta_e < 1.6) || (di >= 52 && di < 58)) {
+    return { level: 3, name: "橘燈", emoji: "🟠", color: "#FF8C00", bgColor: "#FF8C00", textColor: "#FFFFFF" };
+  }
+  // 🟡 黃燈
+  if ((delta_e >= 0.8 && delta_e < 1.2) || (di >= 44 && di < 52)) {
+    return { level: 2, name: "黃燈", emoji: "🟡", color: "#FFD700", bgColor: "#FFD700", textColor: "#333333" };
+  }
+  // 🟢 綠燈
+  return { level: 1, name: "綠燈", emoji: "🟢", color: "#00CC00", bgColor: "#00CC00", textColor: "#FFFFFF" };
+}
+
+/**
+ * 完整 SHPI V3 計算（單日）
+ */
+function calculateSHPI(tempOut, humOut) {
+  // 步驟1：飽和水蒸氣壓
+  const e_s = calcSaturationVaporPressure(tempOut);
+  
+  // 步驟2：室外實際水蒸氣壓
+  const e_out = e_s * humOut / 100;
+  
+  // 步驟3：室內穩態水蒸氣壓
+  const e_in = calcIndoorVaporPressure(tempOut, humOut);
+  
+  // 步驟4：乾燥指數 DI
+  const di = calcDI(e_in);
+  
+  // 步驟5：絕對濕度壓力指數 Δe
+  const delta_e = e_out - e_in;
+  
+  // 燈號判定
+  const light = getLightLevel(delta_e, di);
+  
+  return {
+    tempOut: Math.round(tempOut),
+    humOut: Math.round(humOut),
+    e_s: Math.round(e_s * 1000) / 1000,
+    e_out: Math.round(e_out * 1000) / 1000,
+    e_in: Math.round(e_in * 1000) / 1000,
+    di: Math.round(di * 10) / 10,
+    delta_e: Math.round(delta_e * 1000) / 1000,
+    light: light
+  };
 }
 
 // ==========================================
@@ -306,150 +398,28 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
 }
 
 // ==========================================
-// 室內濕度推算公式（分段函數）
+// 計算城市 2 天預報（改為 2 天）
 // ==========================================
-function calculateIndoorHumidity(tempOut, humOut) {
-  const deltaTemp = tempOut - INDOOR_TEMP;
-  
-  let result = 0;
-  
-  if (deltaTemp <= 0) {
-    result = Math.min(humOut, Math.round(humOut));
-    console.log(`   📐 公式選擇: ΔT≤0 → 情況1 (RH_in = RH_out = ${result}%)`);
-  } else if (deltaTemp < 2) {
-    result = Math.min(90, Math.max(30, Math.round(humOut - 5)));
-    console.log(`   📐 公式選擇: 0<ΔT<2 → 情況2 (RH_in = RH_out - 5 = ${result}%)`);
-  } else if (deltaTemp >= 2 && deltaTemp < 5) {
-    result = Math.min(75, Math.max(35, Math.round(0.85 * humOut - 0.15 * deltaTemp - 8)));
-    console.log(`   📐 公式選擇: 2≤ΔT<5 → 情況3 (RH_in = ${result}%)`);
-  } else {
-    result = Math.min(65, Math.max(25, Math.round(0.82 * humOut - 0.34 * deltaTemp - 16)));
-    console.log(`   📐 公式選擇: ΔT≥5 → 情況4 (RH_in = ${result}%)`);
-  }
-  
-  return result;
-}
 
-// ==========================================
-// 燈號判定（依優先級順序）
-// ==========================================
-function calculateShockLevel(humOut, indoorHumidity) {
-  const gap = humOut - indoorHumidity;
-  
-  console.log(`   📊 計算: Gap = ${humOut} - ${indoorHumidity} = ${gap}%`);
-  console.log(`   🔍 條件檢查:`);
-  
-  if (indoorHumidity <= 15) {
-    console.log(`      ✅ 條件1: RH_in=${indoorHumidity} ≤ 15 → 🔴 危險衝擊`);
-    return { level: 4, name: "危險衝擊", color: "#FF0000", emoji: "🔴" };
-  }
-  console.log(`      ❌ 條件1: RH_in=${indoorHumidity} > 15`);
-  
-  if (indoorHumidity >= 85) {
-    console.log(`      ✅ 條件2: RH_in=${indoorHumidity} ≥ 85 → 🔴 危險衝擊`);
-    return { level: 4, name: "危險衝擊", color: "#FF0000", emoji: "🔴" };
-  }
-  console.log(`      ❌ 條件2: RH_in=${indoorHumidity} < 85`);
-  
-  if (gap >= 30 && indoorHumidity < 45) {
-    console.log(`      ✅ 條件3: Gap=${gap} ≥ 30 且 RH_in=${indoorHumidity} < 45 → 🔴 危險衝擊`);
-    return { level: 4, name: "危險衝擊", color: "#FF0000", emoji: "🔴" };
-  }
-  console.log(`      ❌ 條件3: Gap=${gap} < 30 或 RH_in=${indoorHumidity} ≥ 45`);
-  
-  if (indoorHumidity >= 80) {
-    console.log(`      ✅ 條件4: RH_in=${indoorHumidity} ≥ 80 → 🟠 高衝擊`);
-    return { level: 3, name: "高衝擊", color: "#FF6600", emoji: "🟠" };
-  }
-  console.log(`      ❌ 條件4: RH_in=${indoorHumidity} < 80`);
-  
-  if (indoorHumidity <= 30) {
-    console.log(`      ✅ 條件5: RH_in=${indoorHumidity} ≤ 30 → 🟠 高衝擊`);
-    return { level: 3, name: "高衝擊", color: "#FF6600", emoji: "🟠" };
-  }
-  console.log(`      ❌ 條件5: RH_in=${indoorHumidity} > 30`);
-  
-  if (gap >= 15 && gap < 35 && indoorHumidity < 45) {
-    console.log(`      ✅ 條件6: 15≤${gap}<35 且 RH_in=${indoorHumidity} < 45 → 🟠 高衝擊`);
-    return { level: 3, name: "高衝擊", color: "#FF6600", emoji: "🟠" };
-  }
-  console.log(`      ❌ 條件6: Gap=${gap} 不在 15-35 或 RH_in=${indoorHumidity} ≥ 45`);
-  
-  if (gap <= 15 && (indoorHumidity >= 70 || indoorHumidity <= 40)) {
-    console.log(`      ✅ 條件7: Gap=${gap} ≤ 15 且 (RH_in=${indoorHumidity} ≥70 或 ≤40) → 🟡 中衝擊`);
-    return { level: 2, name: "中衝擊", color: "#FFCC00", emoji: "🟡" };
-  }
-  console.log(`      ❌ 條件7: 不符合`);
-  
-  console.log(`      ✅ 條件8: 其他情況 → 🟢 低衝擊`);
-  return { level: 1, name: "低衝擊", color: "#00CC00", emoji: "🟢" };
-}
-
-function calculateDailyIndex(weather) {
-  if (!weather) {
-    console.log(`   ❌ 無天氣資料`);
-    return {
-      tempOut: null,
-      humOut: null,
-      indoorHumidity: null,
-      gap: null,
-      dataTime: null,
-      shock: { level: 0, name: "暫無資料", color: "#999999", emoji: "❓" }
-    };
-  }
-  
-  console.log(`\n📐 === 開始計算室內濕度 ===`);
-  const indoorHumidity = calculateIndoorHumidity(weather.temp, weather.humidity);
-  const shock = calculateShockLevel(weather.humidity, indoorHumidity);
-  const gap = weather.humidity - indoorHumidity;
-  
-  console.log(`   📋 計算結果匯總:`);
-  console.log(`      室外溫度: ${weather.temp}℃`);
-  console.log(`      室外濕度: ${weather.humidity}%`);
-  console.log(`      室內濕度: ${indoorHumidity}%`);
-  console.log(`      濕度落差: ${gap}%`);
-  console.log(`      最終燈號: ${shock.emoji} ${shock.name}`);
-  
-  return {
-    tempOut: weather.temp,
-    humOut: weather.humidity,
-    indoorHumidity: indoorHumidity,
-    gap: gap,
-    dataTime: weather.dataTime,
-    shock: shock
-  };
-}
-
-async function calculateCityThreeDays(city, targetHour = 14) {
+async function calculateCityTwoDays(city, targetHour = 14) {
   console.log(`\n${'='.repeat(60)}`);
-  console.log(`🏙️ 開始計算 ${city.displayName} 連續3天預報`);
+  console.log(`🏙️ 開始計算 ${city.displayName} 連續2天預報`);
   console.log(`${'='.repeat(60)}`);
   
   const weather0 = await getWeather(city, 0, targetHour);
   const weather1 = await getWeather(city, 1, targetHour);
-  const weather2 = await getWeather(city, 2, targetHour);
   
-  console.log(`\n📅 第1天 (今天):`);
-  const day0 = calculateDailyIndex(weather0);
-  console.log(`\n📅 第2天 (明天):`);
-  const day1 = calculateDailyIndex(weather1);
-  console.log(`\n📅 第3天 (後天):`);
-  const day2 = calculateDailyIndex(weather2);
+  const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity) : null;
+  const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity) : null;
   
-  // 獲取資料時間（從第一天取得）
-  let dataTime = day0.dataTime || null;
+  let dataTime = weather0?.dataTime || null;
   
-  const hasData = day0.shock.level !== 0 || day1.shock.level !== 0 || day2.shock.level !== 0;
-  if (!hasData) {
-    console.log(`⚠️ ${city.displayName} 完全無資料`);
-  }
-  
-  console.log(`\n📊 ${city.displayName} 三天燈號: ${day0.shock.emoji} ${day1.shock.emoji} ${day2.shock.emoji}`);
+  console.log(`\n📊 ${city.displayName} 兩天燈號: ${day0 ? day0.light.emoji : '❓'} ${day1 ? day1.light.emoji : '❓'}`);
   console.log(`${'='.repeat(60)}\n`);
   
   return {
     city: city.displayName,
-    days: [day0, day1, day2],
+    days: [day0, day1],
     dataTime: dataTime
   };
 }
@@ -466,7 +436,6 @@ function getDateString(offset = 0) {
 function getErrorFlexMessage() {
   const today = getDateString(0);
   const tomorrow = getDateString(1);
-  const dayAfter = getDateString(2);
   
   return {
     type: "flex",
@@ -478,8 +447,8 @@ function getErrorFlexMessage() {
         type: "box",
         layout: "vertical",
         contents: [
-          { type: "text", text: "⚠️ 服務暫時無法使用", weight: "bold", size: "lg", color: "#ffffff" },
-          { type: "text", text: `預報日期 ${today} ~ ${dayAfter}`, size: "sm", color: "#dddddd", margin: "xs" }
+          { type: "text", text: "⚠️ 服務暫時無法使用", weight: "bold", size: "xl", color: "#ffffff" },
+          { type: "text", text: `預報日期 ${today} ~ ${tomorrow}`, size: "md", color: "#dddddd", margin: "xs" }
         ],
         backgroundColor: "#FF6600",
         paddingAll: "20px"
@@ -489,12 +458,12 @@ function getErrorFlexMessage() {
         layout: "vertical",
         spacing: "md",
         contents: [
-          { type: "text", text: "中央氣象署 API 暫時無法連線", size: "md", weight: "bold", color: "#FF0000", wrap: true },
-          { type: "text", text: "請稍後再試，或聯繫管理員。", size: "sm", color: "#666666", wrap: true },
+          { type: "text", text: "中央氣象署 API 暫時無法連線", size: "lg", weight: "bold", color: "#FF0000", wrap: true },
+          { type: "text", text: "請稍後再試，或聯繫管理員。", size: "md", color: "#666666", wrap: true },
           { type: "separator", margin: "md" },
-          { type: "text", text: "💡 您可以嘗試：", size: "sm", weight: "bold" },
-          { type: "text", text: "• 幾分鐘後重新查詢", size: "xs", color: "#666666" },
-          { type: "text", text: "• 加入 LINE 好友接收推播", size: "xs", color: "#666666" }
+          { type: "text", text: "💡 您可以嘗試：", size: "md", weight: "bold" },
+          { type: "text", text: "• 幾分鐘後重新查詢", size: "sm", color: "#666666" },
+          { type: "text", text: "• 加入 LINE 好友接收推播", size: "sm", color: "#666666" }
         ],
         paddingAll: "20px"
       },
@@ -512,32 +481,29 @@ function getErrorFlexMessage() {
 }
 
 // ==========================================
-// 第一頁：Flex Message（6都預報表格）
+// 第一頁：Flex Message（6都預報表格 - 2天）
 // ==========================================
 async function generatePage1Flex() {
   const today = getDateString(0);
   const tomorrow = getDateString(1);
-  const dayAfter = getDateString(2);
   const citiesData = [];
   
   let globalDataTime = null;
   
   for (const city of CITIES) {
-    const threeDays = await calculateCityThreeDays(city, 14);
-    citiesData.push(threeDays);
+    const twoDays = await calculateCityTwoDays(city, 14);
+    citiesData.push(twoDays);
     
-    // 記錄第一個有效的資料時間
-    if (!globalDataTime && threeDays.dataTime) {
-      globalDataTime = threeDays.dataTime;
+    if (!globalDataTime && twoDays.dataTime) {
+      globalDataTime = twoDays.dataTime;
     }
   }
   
   const tableRows = [
     { type: "box", layout: "horizontal", contents: [
-      { type: "text", text: "城市", weight: "bold", size: "md", flex: 2 },
-      { type: "text", text: today, weight: "bold", size: "md", flex: 1, align: "center" },
-      { type: "text", text: tomorrow, weight: "bold", size: "md", flex: 1, align: "center" },
-      { type: "text", text: dayAfter, weight: "bold", size: "md", flex: 1, align: "center" }
+      { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2 },
+      { type: "text", text: today, weight: "bold", size: "lg", flex: 1, align: "center" },
+      { type: "text", text: tomorrow, weight: "bold", size: "lg", flex: 1, align: "center" }
     ]},
     { type: "separator", margin: "sm" }
   ];
@@ -545,16 +511,23 @@ async function generatePage1Flex() {
   let hasError = false;
   
   for (const cityData of citiesData) {
-    if (cityData.days.some(day => day.shock.level === 0)) {
+    const day0 = cityData.days[0];
+    const day1 = cityData.days[1];
+    
+    if (!day0 || !day1) {
       hasError = true;
     }
     
+    const emoji0 = day0 ? day0.light.emoji : "❓";
+    const emoji1 = day1 ? day1.light.emoji : "❓";
+    const color0 = day0 ? day0.light.color : "#999999";
+    const color1 = day1 ? day1.light.color : "#999999";
+    
     tableRows.push({
       type: "box", layout: "horizontal", contents: [
-        { type: "text", text: cityData.city, size: "md", flex: 2 },
-        { type: "text", text: cityData.days[0].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[0].shock.color },
-        { type: "text", text: cityData.days[1].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[1].shock.color },
-        { type: "text", text: cityData.days[2].shock.emoji, size: "md", flex: 1, align: "center", color: cityData.days[2].shock.color }
+        { type: "text", text: cityData.city, size: "lg", flex: 2 },
+        { type: "text", text: emoji0, size: "xl", flex: 1, align: "center", color: color0 },
+        { type: "text", text: emoji1, size: "xl", flex: 1, align: "center", color: color1 }
       ]
     });
   }
@@ -564,15 +537,15 @@ async function generatePage1Flex() {
   
   const footerContents = [
     { type: "separator" },
-    { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "xs", color: "#999999", align: "center" },
-    { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "sm", color: "#999999", align: "center" }
+    { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center" },
+    { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "md", color: "#999999", align: "center" }
   ];
   
   if (hasError) {
     footerContents.push({ 
       type: "text", 
       text: "⚠️ 部分城市資料取得失敗，顯示「❓」表示暫無資料", 
-      size: "xs", 
+      size: "sm", 
       color: "#FF6600", 
       align: "center",
       wrap: true
@@ -580,13 +553,13 @@ async function generatePage1Flex() {
   }
   
   footerContents.push(
-    { type: "text", text: "📊 數據來源：中央氣象署", size: "xs", color: "#999999", align: "center" },
+    { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
     { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
   );
   
   return {
     type: "flex",
-    altText: `🌡️💧 皮膚濕度壓力指數 ${today}~${dayAfter}`,
+    altText: `🌡️💧 皮膚濕度壓力指數 ${today}~${tomorrow}`,
     contents: {
       type: "bubble",
       size: "mega",
@@ -594,8 +567,8 @@ async function generatePage1Flex() {
         type: "box",
         layout: "vertical",
         contents: [
-          { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "lg", color: "#ffffff" },
-          { type: "text", text: `預報日期 ${today} ~ ${dayAfter} (下午2點數據)`, size: "sm", color: "#dddddd", margin: "xs" }
+          { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "xl", color: "#ffffff" },
+          { type: "text", text: `預報日期 ${today} ~ ${tomorrow} (下午2點數據)`, size: "md", color: "#dddddd", margin: "xs" }
         ],
         backgroundColor: "#667eea",
         paddingAll: "20px"
@@ -608,14 +581,14 @@ async function generatePage1Flex() {
           ...tableRows,
           { type: "separator", margin: "md" },
           { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🟢 低衝擊", size: "sm", color: "#00CC00", flex: 1, align: "center" },
-            { type: "text", text: "🟡 中衝擊", size: "sm", color: "#FFCC00", flex: 1, align: "center" }
+            { type: "text", text: "🟢 綠燈", size: "lg", color: "#00CC00", flex: 1, align: "center", weight: "bold" },
+            { type: "text", text: "🟡 黃燈", size: "lg", color: "#FFD700", flex: 1, align: "center", weight: "bold" }
           ]},
           { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🟠 高衝擊", size: "sm", color: "#FF6600", flex: 1, align: "center" },
-            { type: "text", text: "🔴 危險衝擊", size: "sm", color: "#FF0000", flex: 1, align: "center" }
+            { type: "text", text: "🟠 橘燈", size: "lg", color: "#FF8C00", flex: 1, align: "center", weight: "bold" },
+            { type: "text", text: "🔴 紅燈", size: "lg", color: "#FF0000", flex: 1, align: "center", weight: "bold" }
           ]},
-          { type: "text", text: "❓ 暫無資料", size: "xs", color: "#999999", align: "center", margin: "md" }
+          { type: "text", text: "❓ 暫無資料", size: "md", color: "#999999", align: "center", margin: "md" }
         ],
         paddingAll: "20px"
       },
@@ -631,7 +604,7 @@ async function generatePage1Flex() {
 }
 
 // ==========================================
-// 第二頁：完整使用說明與保健建議
+// 第二頁：完整使用說明與保健建議（字體放大）
 // ==========================================
 async function generatePage2Flex() {
   return {
@@ -644,7 +617,7 @@ async function generatePage2Flex() {
         type: "box",
         layout: "vertical",
         contents: [
-          { type: "text", text: "📋 使用說明與保健建議", weight: "bold", size: "lg", color: "#ffffff" }
+          { type: "text", text: "📋 使用說明與保健建議", weight: "bold", size: "xl", color: "#ffffff" }
         ],
         backgroundColor: "#667eea",
         paddingAll: "20px"
@@ -654,34 +627,34 @@ async function generatePage2Flex() {
         layout: "vertical",
         spacing: "md",
         contents: [
-          { type: "text", text: "🚦 燈號意義", weight: "bold", size: "md" },
-          { type: "text", text: "🟢 低衝擊", weight: "bold", size: "sm", color: "#00CC00" },
-          { type: "text", text: "舒適區：水分散失與保留達到相對動態平衡", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "🟡 中衝擊", weight: "bold", size: "sm", color: "#FFCC00", margin: "xs" },
-          { type: "text", text: "溫和乾燥/潮濕：濕度偏高或偏低但落差小", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "🟠 高衝擊", weight: "bold", size: "sm", color: "#FF6600", margin: "xs" },
-          { type: "text", text: "重度乾燥或中度環境衝擊", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "🔴 危險衝擊", weight: "bold", size: "sm", color: "#FF0000", margin: "xs" },
-          { type: "text", text: "極端乾燥/潮濕或環境衝擊：需立即防護", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "❓ 暫無資料", weight: "bold", size: "sm", color: "#999999", margin: "xs" },
-          { type: "text", text: "該時段無法取得天氣資料，請稍後再試", size: "sm", color: "#666666", wrap: true },
+          { type: "text", text: "🚦 燈號意義", weight: "bold", size: "lg" },
+          { type: "text", text: "🟢 綠燈", weight: "bold", size: "lg", color: "#00CC00" },
+          { type: "text", text: "Δe < 0.8 kPa 且 DI < 44\n舒適區：水分散失與保留達到相對動態平衡", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "🟡 黃燈", weight: "bold", size: "lg", color: "#FFD700", margin: "xs" },
+          { type: "text", text: "0.8 ≤ Δe < 1.2 或 44 ≤ DI < 52\n溫和濕度落差，建議基礎保濕", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "🟠 橘燈", weight: "bold", size: "lg", color: "#FF8C00", margin: "xs" },
+          { type: "text", text: "1.2 ≤ Δe < 1.6 或 52 ≤ DI < 58\n顯著濕度衝擊，加強屏障修護", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "🔴 紅燈", weight: "bold", size: "lg", color: "#FF0000", margin: "xs" },
+          { type: "text", text: "Δe ≥ 1.6 或 DI ≥ 58\n劇烈滲透壓變化，積極防護", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "❓ 暫無資料", weight: "bold", size: "lg", color: "#999999", margin: "xs" },
+          { type: "text", text: "該時段無法取得天氣資料，請稍後再試", size: "md", color: "#666666", wrap: true },
           { type: "separator", margin: "md" },
           
-          { type: "text", text: "💡 保健建議", weight: "bold", size: "md" },
-          { type: "text", text: "🟢 低衝擊：維持日常基礎保養", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "🟡 中衝擊：乾燥型加強保濕／潮濕型開啟除濕", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "🟠 高衝擊：減少戶外停留，主動調整室內濕度", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "🔴 危險衝擊：避免外出，立即調整環境", size: "sm", color: "#666666", wrap: true },
+          { type: "text", text: "💡 保健建議", weight: "bold", size: "lg" },
+          { type: "text", text: "🟢 綠燈：維持日常基礎保養", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "🟡 黃燈：加強保濕，注意室內濕度", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "🟠 橘燈：減少戶外停留，加強屏障修護", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "🔴 紅燈：避免進出冷熱環境，立即保濕防護", size: "md", color: "#666666", wrap: true },
           { type: "separator", margin: "md" },
           
-          { type: "text", text: "🔍 查詢指令", weight: "bold", size: "md" },
-          { type: "text", text: "• 輸入「全台」查看六都3天預報", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "sm", color: "#666666", wrap: true },
+          { type: "text", text: "🔍 查詢指令", weight: "bold", size: "lg" },
+          { type: "text", text: "• 輸入「全台」查看六都2天預報", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "md", color: "#666666", wrap: true },
           { type: "separator", margin: "md" },
           
-          { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "md" },
-          { type: "text", text: "• 輸入「加入訂閱」開啟每日提醒", size: "sm", color: "#666666", wrap: true },
-          { type: "text", text: "• 輸入「取消訂閱」關閉每日提醒", size: "sm", color: "#666666", wrap: true }
+          { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "lg" },
+          { type: "text", text: "• 輸入「加入訂閱」開啟每日提醒", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "• 輸入「取消訂閱」關閉每日提醒", size: "md", color: "#666666", wrap: true }
         ],
         paddingAll: "20px"
       },
@@ -690,8 +663,8 @@ async function generatePage2Flex() {
         layout: "vertical",
         contents: [
           { type: "separator" },
-          { type: "text", text: "📊 中央氣象署 | 室內濕度推算：工研院終極公式", size: "xs", color: "#999999", align: "center" },
-          { type: "text", text: "📖 科學依據：Denda et al. (2002)、PMC (2019) 等", size: "xs", color: "#999999", align: "center" }
+          { type: "text", text: "📊 中央氣象署 | 室內濕度推算：SHPI V3", size: "sm", color: "#999999", align: "center" },
+          { type: "text", text: "📖 科學依據：Denda et al. (2002)、Tetens Equation", size: "sm", color: "#999999", align: "center" }
         ],
         paddingAll: "12px"
       }
@@ -837,7 +810,7 @@ async function sendPrivateMessage(userId, page1) {
 // ==========================================
 // 網站 API
 // ==========================================
-app.get('/api/all-cities-3days', async (req, res) => {
+app.get('/api/all-cities-2days', async (req, res) => {
   try {
     const cache = await getCachedForecast();
     if (cache && cache.page1) {
@@ -894,7 +867,7 @@ app.post('/webhook', async (req, res) => {
             `🌡️💧 皮膚濕度壓力指數 Bot 已加入！
 
 📊 使用方式：
-• 輸入「全台」查詢六都3天預報
+• 輸入「全台」查詢六都2天預報
 • 輸入「詳細說明」查看完整說明
 
 💡 查詢結果會「私訊」給您，不會打擾群組成員`);
