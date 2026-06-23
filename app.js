@@ -1,3 +1,4 @@
+
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -31,18 +32,14 @@ const GITHUB_REPO = process.env.GITHUB_REPO;
 
 // 檔案路徑定義
 const SUBSCRIBERS_FILE = './subscribers.json';
-const HUMIDITY_HISTORY_FILE = './humidity_history.json';
 const GROUPS_FILE = './groups.json';
 const CACHE_FILE = './cached_forecast.json';
 
 // 全域變數
 let subscribers = [];
 let groups = [];
-let humidityHistory = {};
 let cachedForecast = null;
 let lastCacheTime = null;
-
-// 限制查詢頻率
 let lastQueryTime = {};
 
 // ==========================================
@@ -143,21 +140,6 @@ const CITIES = [
   { code: "5", name: "臺南市", displayName: "臺南市", apiName: "臺南市" },
   { code: "6", name: "高雄市", displayName: "高雄市", apiName: "高雄市" }
 ];
-
-// ==========================================
-// 濕度歷史紀錄
-// ==========================================
-try {
-  if (fs.existsSync(HUMIDITY_HISTORY_FILE)) {
-    const data = fs.readFileSync(HUMIDITY_HISTORY_FILE, 'utf8');
-    humidityHistory = JSON.parse(data);
-    console.log(`📋 載入濕度歷史紀錄`);
-  }
-} catch(e) { }
-
-function saveHumidityHistory() {
-  fs.writeFileSync(HUMIDITY_HISTORY_FILE, JSON.stringify(humidityHistory, null, 2));
-}
 
 // ==========================================
 // SHPI V3 核心計算函數（與 VBA 版本一致）
@@ -398,7 +380,7 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
 }
 
 // ==========================================
-// 計算城市 2 天預報（改為 2 天）
+// 計算城市 2 天預報
 // ==========================================
 
 async function calculateCityTwoDays(city, targetHour = 14) {
@@ -532,7 +514,6 @@ async function generatePage1Flex() {
     });
   }
   
-  // 資料時間顯示
   const dataTimeStr = globalDataTime || new Date().toLocaleString();
   
   const footerContents = [
@@ -604,7 +585,7 @@ async function generatePage1Flex() {
 }
 
 // ==========================================
-// 第二頁：完整使用說明與保健建議（字體放大）
+// 第二頁：完整使用說明與保健建議
 // ==========================================
 async function generatePage2Flex() {
   return {
@@ -1014,16 +995,26 @@ setInterval(() => {
 console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
 
 // ==========================================
-// 定時預計算任務（每天台灣時間 14:10）
+// ⭐ 定時預計算任務（雙重保險 - 已移除 17:10）
 // ==========================================
+
+// 14:10 預計算（備用）
 cron.schedule('10 14 * * *', () => {
-  console.log(`\n⏰ 定時任務觸發 - 開始預計算`);
+  console.log(`\n⏰ [14:10] 定時預計算觸發 (備用)`);
   precomputeAndCache();
 }, {
   timezone: "Asia/Taipei"
 });
 
-console.log('📅 已設定定時預計算任務：每天 14:10 (台灣時間)');
+// 18:00 預計算（主要 - 確保氣象署資料已完整釋出）
+cron.schedule('0 18 * * *', () => {
+  console.log(`\n⏰ [18:00] 主要預計算 - 確保資料完整釋出`);
+  precomputeAndCache();
+}, {
+  timezone: "Asia/Taipei"
+});
+
+console.log('📅 已設定雙重定時預計算任務：每天 14:10 及 18:00 (台灣時間)');
 
 // ==========================================
 // 啟動伺服器
@@ -1046,7 +1037,7 @@ console.log('📅 已設定定時預計算任務：每天 14:10 (台灣時間)')
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
     console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
-    console.log(`⏰ 預計算時間：每天 14:10 (台灣時間)`);
+    console.log(`⏰ 預計算時間：每天 14:10 (備用) 及 18:00 (主要)`);
     console.log(`🕐 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
     console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
