@@ -282,41 +282,48 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
       return null;
     }
     
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + dateOffset);
-    const targetDateStr = targetDate.toISOString().split('T')[0];
-    
+    // ============================================================
+    // ✅ 直接從 API 的 DataTime 讀取，而非用 JavaScript 推算
+    // ============================================================
     let tempValue = null, humValue = null;
+    let actualDataTime = null;  // ⭐ 儲存 API 實際的 DataTime
     
+    // 先找溫度
     for (const t of tempElem.Time) {
       const dataTime = t.DataTime;
-      if (dataTime && dataTime.includes(targetDateStr)) {
-        const hour = parseInt(dataTime.split('T')[1]?.split(':')[0]);
-        if (hour === targetHour) {
-          tempValue = t.ElementValue?.[0]?.Temperature;
-          break;
+      if (dataTime) {
+        const parts = dataTime.split('T');
+        if (parts.length === 2) {
+          const timePart = parts[1]?.split(':')[0];
+          if (parseInt(timePart) === targetHour) {
+            tempValue = t.ElementValue?.[0]?.Temperature;
+            actualDataTime = dataTime;
+            break;
+          }
         }
       }
     }
     
-    for (const h of humElem.Time) {
-      const dataTime = h.DataTime;
-      if (dataTime && dataTime.includes(targetDateStr)) {
-        const hour = parseInt(dataTime.split('T')[1]?.split(':')[0]);
-        if (hour === targetHour) {
+    // 再找濕度（使用相同的 actualDataTime）
+    if (actualDataTime) {
+      for (const h of humElem.Time) {
+        if (h.DataTime === actualDataTime) {
           humValue = h.ElementValue?.[0]?.RelativeHumidity;
           break;
         }
       }
     }
     
-    if (tempValue && humValue) {
+    if (tempValue && humValue && actualDataTime) {
+      // 格式化 DataTime 為可讀格式
+      const formattedTime = actualDataTime.replace('T', ' ');
       console.log(`📊 原始數據: 溫度=${tempValue}℃, 濕度=${humValue}%`);
+      console.log(`📅 API DataTime: ${formattedTime}`);
       console.log(`✅ API 連線成功`);
       return {
         temp: Math.round(parseFloat(tempValue)),
         humidity: Math.round(parseFloat(humValue)),
-        dataTime: `${targetDateStr} ${targetHour}:00`
+        dataTime: formattedTime
       };
     }
     
@@ -394,7 +401,7 @@ async function calculateCityTwoDays(city, targetHour = 14) {
   const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity) : null;
   const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity) : null;
   
-  let dataTime = weather0?.dataTime || null;
+  let dataTime = weather0?.dataTime || weather1?.dataTime || null;
   
   console.log(`\n📊 ${city.displayName} 兩天燈號: ${day0 ? day0.light.emoji : '❓'} ${day1 ? day1.light.emoji : '❓'}`);
   console.log(`${'='.repeat(60)}\n`);
@@ -478,31 +485,46 @@ async function generatePage1Flex() {
     }
   }
   
-  // ✅ 從資料時間提取日期（而非使用執行當下日期）
- // generatePage1Flex() 中
-// ✅ 新版（從 API 資料時間提取日期）
-let day0Label = "日期1";
-let day1Label = "日期2";
-
-if (globalDataTime) {
-  // globalDataTime 格式範例： "2026-06-25 14:00"
-  const parts = globalDataTime.split(' ');
-  if (parts.length > 0) {
-    const dateParts = parts[0].split('-');
-    if (dateParts.length === 3) {
-      const year = parseInt(dateParts[0]);
-      const month = parseInt(dateParts[1]);
-      const day = parseInt(dateParts[2]);
-      day0Label = `${month}/${day}`;
-      
-      // 計算明天的日期
-      const d = new Date(year, month - 1, day);
-      d.setDate(d.getDate() + 1);
-      day1Label = `${d.getMonth()+1}/${d.getDate()}`;
-    }
-  }
-}
+  // ============================================================
+  // ✅ 從 API 的 dataTime 提取日期（直接從氣象局 API 日期顯示）
+  // ============================================================
+  let day0Label = "日期1";
+  let day1Label = "日期2";
   
+  if (globalDataTime) {
+    // globalDataTime 格式範例： "2026-06-25 14:00"
+    const parts = globalDataTime.split(' ');
+    if (parts.length > 0) {
+      const dateParts = parts[0].split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]);
+        const day = parseInt(dateParts[2]);
+        day0Label = `${month}/${day}`;
+        
+        // 計算明天的日期
+        const d = new Date(year, month - 1, day);
+        d.setDate(d.getDate() + 1);
+        day1Label = `${d.getMonth()+1}/${d.getDate()}`;
+      }
+    }
+  } else {
+    // ⭐ 備用：使用當前台灣時間
+    const now = new Date();
+    const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    const year = taiwanTime.getUTCFullYear();
+    const month = taiwanTime.getUTCMonth() + 1;
+    const day = taiwanTime.getUTCDate();
+    day0Label = `${month}/${day}`;
+    
+    const d = new Date(year, month - 1, day);
+    d.setDate(d.getDate() + 1);
+    day1Label = `${d.getMonth()+1}/${d.getDate()}`;
+    
+    console.log(`⚠️ 無 API 資料時間，使用當前日期: ${day0Label} ~ ${day1Label}`);
+  }
+  
+  // 建立表格標題列
   const tableRows = [
     { type: "box", layout: "horizontal", contents: [
       { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2 },
@@ -514,6 +536,7 @@ if (globalDataTime) {
   
   let hasError = false;
   
+  // 逐城市填入燈號
   for (const cityData of citiesData) {
     const day0 = cityData.days[0];
     const day1 = cityData.days[1];
@@ -536,8 +559,10 @@ if (globalDataTime) {
     });
   }
   
+  // 資料時間顯示
   const dataTimeStr = globalDataTime || new Date().toLocaleString();
   
+  // Footer 內容
   const footerContents = [
     { type: "separator" },
     { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center" },
@@ -560,6 +585,7 @@ if (globalDataTime) {
     { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
   );
   
+  // 回傳 Flex Message
   return {
     type: "flex",
     altText: `🌡️💧 皮膚濕度壓力指數 ${day0Label}~${day1Label}`,
