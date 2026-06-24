@@ -479,27 +479,26 @@ async function generatePage1Flex() {
   }
   
   // ✅ 從資料時間提取日期（而非使用執行當下日期）
-  let day0Label = "今天";
-  let day1Label = "明天";
-  
-  if (globalDataTime) {
-    // globalDataTime 格式範例： "2026-06-25 14:00"
-    const parts = globalDataTime.split(' ');
-    if (parts.length > 0) {
-      const dateParts = parts[0].split('-');
-      if (dateParts.length === 3) {
-        const year = parseInt(dateParts[0]);
-        const month = parseInt(dateParts[1]);
-        const day = parseInt(dateParts[2]);
-        day0Label = `${month}/${day}`;
-        
-        // 計算明天的日期
-        const d = new Date(year, month - 1, day);
-        d.setDate(d.getDate() + 1);
-        day1Label = `${d.getMonth()+1}/${d.getDate()}`;
-      }
+ // generatePage1Flex() 中
+let day0Label = "今天";
+let day1Label = "明天";
+
+if (globalDataTime) {
+  const parts = globalDataTime.split(' ');
+  if (parts.length > 0) {
+    const dateParts = parts[0].split('-');
+    if (dateParts.length === 3) {
+      const year = parseInt(dateParts[0]);
+      const month = parseInt(dateParts[1]);
+      const day = parseInt(dateParts[2]);
+      day0Label = `${month}/${day}`;
+      
+      const d = new Date(year, month - 1, day);
+      d.setDate(d.getDate() + 1);
+      day1Label = `${d.getMonth()+1}/${d.getDate()}`;
     }
   }
+}
   
   const tableRows = [
     { type: "box", layout: "horizontal", contents: [
