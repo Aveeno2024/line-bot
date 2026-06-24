@@ -466,10 +466,7 @@ function getErrorFlexMessage() {
 // 第一頁：Flex Message（6都預報表格 - 2天）
 // ==========================================
 async function generatePage1Flex() {
-  const today = getDateString(0);
-  const tomorrow = getDateString(1);
   const citiesData = [];
-  
   let globalDataTime = null;
   
   for (const city of CITIES) {
@@ -481,11 +478,34 @@ async function generatePage1Flex() {
     }
   }
   
+  // ✅ 從資料時間提取日期（而非使用執行當下日期）
+  let day0Label = "今天";
+  let day1Label = "明天";
+  
+  if (globalDataTime) {
+    // globalDataTime 格式範例： "2026-06-25 14:00"
+    const parts = globalDataTime.split(' ');
+    if (parts.length > 0) {
+      const dateParts = parts[0].split('-');
+      if (dateParts.length === 3) {
+        const year = parseInt(dateParts[0]);
+        const month = parseInt(dateParts[1]);
+        const day = parseInt(dateParts[2]);
+        day0Label = `${month}/${day}`;
+        
+        // 計算明天的日期
+        const d = new Date(year, month - 1, day);
+        d.setDate(d.getDate() + 1);
+        day1Label = `${d.getMonth()+1}/${d.getDate()}`;
+      }
+    }
+  }
+  
   const tableRows = [
     { type: "box", layout: "horizontal", contents: [
       { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2 },
-      { type: "text", text: today, weight: "bold", size: "lg", flex: 1, align: "center" },
-      { type: "text", text: tomorrow, weight: "bold", size: "lg", flex: 1, align: "center" }
+      { type: "text", text: day0Label, weight: "bold", size: "lg", flex: 1, align: "center" },
+      { type: "text", text: day1Label, weight: "bold", size: "lg", flex: 1, align: "center" }
     ]},
     { type: "separator", margin: "sm" }
   ];
@@ -540,7 +560,7 @@ async function generatePage1Flex() {
   
   return {
     type: "flex",
-    altText: `🌡️💧 皮膚濕度壓力指數 ${today}~${tomorrow}`,
+    altText: `🌡️💧 皮膚濕度壓力指數 ${day0Label}~${day1Label}`,
     contents: {
       type: "bubble",
       size: "mega",
@@ -549,7 +569,7 @@ async function generatePage1Flex() {
         layout: "vertical",
         contents: [
           { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "xl", color: "#ffffff" },
-          { type: "text", text: `預報日期 ${today} ~ ${tomorrow} (下午2點數據)`, size: "md", color: "#dddddd", margin: "xs" }
+          { type: "text", text: `預報日期 ${day0Label} ~ ${day1Label} (下午2點數據)`, size: "md", color: "#dddddd", margin: "xs" }
         ],
         backgroundColor: "#667eea",
         paddingAll: "20px"
