@@ -283,19 +283,28 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     }
     
     // ============================================================
-    // ✅ 直接從 API 的 DataTime 讀取，而非用 JavaScript 推算
+    // ✅ 計算目標日期字串 (YYYY-MM-DD)
+    // ============================================================
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + dateOffset);
+    const targetDateStr = targetDate.toISOString().split('T')[0];
+    console.log(`📅 目標日期: ${targetDateStr}`);
+    
+    // ============================================================
+    // ✅ 同時比對日期和時間
     // ============================================================
     let tempValue = null, humValue = null;
-    let actualDataTime = null;  // ⭐ 儲存 API 實際的 DataTime
+    let actualDataTime = null;
     
-    // 先找溫度
+    // 先找溫度（同時比對日期和時間）
     for (const t of tempElem.Time) {
       const dataTime = t.DataTime;
       if (dataTime) {
         const parts = dataTime.split('T');
         if (parts.length === 2) {
+          const datePart = parts[0];
           const timePart = parts[1]?.split(':')[0];
-          if (parseInt(timePart) === targetHour) {
+          if (datePart === targetDateStr && parseInt(timePart) === targetHour) {
             tempValue = t.ElementValue?.[0]?.Temperature;
             actualDataTime = dataTime;
             break;
@@ -315,7 +324,6 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     }
     
     if (tempValue && humValue && actualDataTime) {
-      // 格式化 DataTime 為可讀格式
       const formattedTime = actualDataTime.replace('T', ' ');
       console.log(`📊 原始數據: 溫度=${tempValue}℃, 濕度=${humValue}%`);
       console.log(`📅 API DataTime: ${formattedTime}`);
@@ -327,7 +335,7 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
       };
     }
     
-    console.log(`❌ 找不到指定時間的數據`);
+    console.log(`❌ 找不到 ${targetDateStr} ${targetHour}:00 的數據`);
     return null;
   } catch (error) {
     console.error(`❌ API 錯誤: ${error.message}`);
