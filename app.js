@@ -1,4 +1,3 @@
-
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -395,16 +394,17 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
 }
 
 // ==========================================
-// 計算城市 2 天預報
+// 計算城市 2 天預報（支援起始偏移）
 // ==========================================
 
-async function calculateCityTwoDays(city, targetHour = 14) {
+async function calculateCityTwoDays(city, startOffset = 1, targetHour = 14) {
   console.log(`\n${'='.repeat(60)}`);
-  console.log(`🏙️ 開始計算 ${city.displayName} 連續2天預報`);
+  console.log(`🏙️ 開始計算 ${city.displayName} 連續2天預報 (從 +${startOffset} 天開始)`);
   console.log(`${'='.repeat(60)}`);
   
-  const weather0 = await getWeather(city, 0, targetHour);
-  const weather1 = await getWeather(city, 1, targetHour);
+  // ✅ 從 startOffset 開始抓，而不是從 0 開始
+  const weather0 = await getWeather(city, startOffset, targetHour);
+  const weather1 = await getWeather(city, startOffset + 1, targetHour);
   
   const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity) : null;
   const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity) : null;
@@ -480,12 +480,12 @@ function getErrorFlexMessage() {
 // ==========================================
 // 第一頁：Flex Message（6都預報表格 - 2天）
 // ==========================================
-async function generatePage1Flex() {
+async function generatePage1Flex(startOffset = 1) {
   const citiesData = [];
   let globalDataTime = null;
   
   for (const city of CITIES) {
-    const twoDays = await calculateCityTwoDays(city, 14);
+    const twoDays = await calculateCityTwoDays(city, startOffset, 14);
     citiesData.push(twoDays);
     
     if (!globalDataTime && twoDays.dataTime) {
@@ -494,38 +494,7 @@ async function generatePage1Flex() {
   }
   
   // ============================================================
-  // ✅ 如果 globalDataTime 為 null，嘗試從已載入的快取中恢復日期
-  // ============================================================
-  if (!globalDataTime) {
-    console.log(`⚠️ globalDataTime 為 null，嘗試從快取恢復日期...`);
-    try {
-      if (fs.existsSync(CACHE_FILE)) {
-        const cacheData = fs.readFileSync(CACHE_FILE, 'utf8');
-        const cache = JSON.parse(cacheData);
-        if (cache.page1 && cache.page1.contents && cache.page1.contents.header) {
-          const headerText = cache.page1.contents.header.contents[1]?.text || "";
-          // 從 "預報日期 6/25 ~ 6/26 (下午2點數據)" 中提取日期
-          const match = headerText.match(/預報日期\s+(\d+)\/(\d+)\s*~\s*(\d+)\/(\d+)/);
-          if (match) {
-            const month1 = parseInt(match[1]);
-            const day1 = parseInt(match[2]);
-            const month2 = parseInt(match[3]);
-            const day2 = parseInt(match[4]);
-            // 重建 globalDataTime（假設年份為當前年份）
-            const now = new Date();
-            const year = now.getFullYear();
-            globalDataTime = `${year}-${String(month1).padStart(2,'0')}-${String(day1).padStart(2,'0')} 14:00`;
-            console.log(`✅ 從快取恢復日期: ${globalDataTime}`);
-          }
-        }
-      }
-    } catch(e) {
-      console.log(`⚠️ 無法從快取恢復日期: ${e.message}`);
-    }
-  }
-  
-  // ============================================================
-  // ✅ 提取日期
+  // ✅ 從 API 的 dataTime 提取日期
   // ============================================================
   let day0Label = "日期1";
   let day1Label = "日期2";
@@ -543,22 +512,24 @@ async function generatePage1Flex() {
         const d = new Date(year, month - 1, day);
         d.setDate(d.getDate() + 1);
         day1Label = `${d.getMonth()+1}/${d.getDate()}`;
+        
+        console.log(`✅ 從 API 日期提取: ${day0Label} ~ ${day1Label}`);
       }
     }
   } else {
-    // ⭐ 僅在完全無法取得日期時才使用備用日期
+    // ⭐ 備用：使用當前台灣時間 + startOffset
     const now = new Date();
     const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     const year = taiwanTime.getUTCFullYear();
     const month = taiwanTime.getUTCMonth() + 1;
-    const day = taiwanTime.getUTCDate();
+    const day = taiwanTime.getUTCDate() + startOffset;
     day0Label = `${month}/${day}`;
     
     const d = new Date(year, month - 1, day);
     d.setDate(d.getDate() + 1);
     day1Label = `${d.getMonth()+1}/${d.getDate()}`;
     
-    console.log(`⚠️ 完全無法取得日期，使用當前台灣時間: ${day0Label} ~ ${day1Label}`);
+    console.log(`⚠️ 使用備用日期: ${day0Label} ~ ${day1Label}`);
   }
   
   // 建立表格標題列
@@ -742,42 +713,14 @@ async function generatePage2Flex() {
 // 快取管理函數
 // ==========================================
 
-async function precomputeAndCache() {
+async function precomputeAndCache(startOffset = 1) {
   console.log(`\n🔄 開始預計算快取 - ${new Date().toLocaleString()}`);
+  console.log(`📅 從 +${startOffset} 天開始抓取`);
   const startTime = Date.now();
   
   try {
-    // ✅ 先讀取現有快取（用於日期保護）
-    let existingPage1 = null;
-    try {
-      if (fs.existsSync(CACHE_FILE)) {
-        const cacheData = fs.readFileSync(CACHE_FILE, 'utf8');
-        const cache = JSON.parse(cacheData);
-        existingPage1 = cache.page1;
-      }
-    } catch(e) {}
-    
-    const page1 = await generatePage1Flex();
+    const page1 = await generatePage1Flex(startOffset);
     const page2 = await generatePage2Flex();
-    
-    // ✅ 如果新生成的 page1 標題是「日期1 ~ 日期2」，但舊快取有正確日期，則保留舊標題
-    if (page1 && page1.contents && page1.contents.header) {
-      const newHeader = page1.contents.header.contents[1]?.text || "";
-      if (newHeader.includes('日期1 ~ 日期2') && existingPage1) {
-        console.log(`⚠️ 新生成的日期為「日期1 ~ 日期2」，保留舊快取的日期標題`);
-        // 複製舊快取的 header 和表格標題
-        if (existingPage1.contents && existingPage1.contents.header) {
-          page1.contents.header.contents[1].text = existingPage1.contents.header.contents[1]?.text || newHeader;
-        }
-        if (existingPage1.contents && existingPage1.contents.body) {
-          const oldTableRow = existingPage1.contents.body.contents[0];
-          if (oldTableRow && oldTableRow.contents && oldTableRow.contents.length >= 3) {
-            page1.contents.body.contents[0].contents[1].text = oldTableRow.contents[1]?.text || "日期1";
-            page1.contents.body.contents[0].contents[2].text = oldTableRow.contents[2]?.text || "日期2";
-          }
-        }
-      }
-    }
     
     cachedForecast = { page1, page2 };
     lastCacheTime = new Date();
@@ -785,7 +728,8 @@ async function precomputeAndCache() {
     const cacheData = {
       page1: page1,
       page2: page2,
-      lastCacheTime: lastCacheTime.toISOString()
+      lastCacheTime: lastCacheTime.toISOString(),
+      startOffset: startOffset
     };
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
     
@@ -816,13 +760,13 @@ function loadCacheFromFile() {
 async function getCachedForecast() {
   if (!cachedForecast || !cachedForecast.page1) {
     console.log('⚠️ 快取不存在，重新預計算');
-    await precomputeAndCache();
+    await precomputeAndCache(1);
     return cachedForecast;
   }
   
   if (lastCacheTime && (Date.now() - lastCacheTime.getTime() > 24 * 60 * 60 * 1000)) {
     console.log('⚠️ 快取已超過 24 小時，重新預計算');
-    await precomputeAndCache();
+    await precomputeAndCache(1);
     return cachedForecast;
   }
   
@@ -929,7 +873,7 @@ app.get('/health', (req, res) => {
 
 app.get('/api/refresh-cache', async (req, res) => {
   console.log('🔄 手動觸發快取更新');
-  await precomputeAndCache();
+  await precomputeAndCache(1);
   res.json({ success: true, message: '快取已更新', cacheTime: lastCacheTime?.toLocaleString() });
 });
 
@@ -1112,15 +1056,17 @@ console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7
 // ⭐ 定時預計算任務（僅 18:00 主要）
 // ==========================================
 
-// 18:00 預計算（主要 - 確保氣象署資料已完整釋出）
+// 18:00 預計算（主要 - 確保氣象署 17:00 發布的資料已完整釋出）
 cron.schedule('0 18 * * *', () => {
-  console.log(`\n⏰ [18:00] 主要預計算 - 確保資料完整釋出`);
-  precomputeAndCache();
+  console.log(`\n⏰ [18:00] 主要預計算 - 使用 17:00 發布的最新資料`);
+  // ✅ startOffset=1：跳過今天，從明天開始抓
+  precomputeAndCache(1);
 }, {
   timezone: "Asia/Taipei"
 });
 
 console.log('📅 已設定定時預計算任務：每天 18:00 (台灣時間)');
+console.log('📌 預計算從 +1 天（明天）開始抓取，跳過已過期的今天 14:00');
 
 // ==========================================
 // 啟動伺服器
@@ -1130,11 +1076,11 @@ console.log('📅 已設定定時預計算任務：每天 18:00 (台灣時間)')
   loadCacheFromFile();
   
   if (!cachedForecast) {
-    console.log('🚀 啟動時無快取，立即執行預計算');
-    await precomputeAndCache();
+    console.log('🚀 啟動時無快取，立即執行預計算（從 +1 天開始）');
+    await precomputeAndCache(1);
   } else if (lastCacheTime && (Date.now() - lastCacheTime.getTime() > 24 * 60 * 60 * 1000)) {
-    console.log('⚠️ 快取已超過 24 小時，重新預計算');
-    await precomputeAndCache();
+    console.log('⚠️ 快取已超過 24 小時，重新預計算（從 +1 天開始）');
+    await precomputeAndCache(1);
   }
   
   const PORT = process.env.PORT || 3000;
@@ -1144,6 +1090,7 @@ console.log('📅 已設定定時預計算任務：每天 18:00 (台灣時間)')
     console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
     console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
     console.log(`⏰ 預計算時間：每天 18:00 (台灣時間)`);
+    console.log(`📌 預計算從 +1 天（明天）開始抓取，跳過已過期的今天 14:00`);
     console.log(`🕐 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
     console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
