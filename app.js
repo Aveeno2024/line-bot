@@ -1,29 +1,3 @@
-const express = require('express');
-const axios = require('axios');
-const fs = require('fs');
-const cron = require('node-cron');
-const app = express();
-app.use(express.json());
-
-// ==========================================
-// 啟用 CORS（允許網站跨域請求）
-// ==========================================
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
-// ==========================================
-// ⚠️ 請填入你的金鑰 ⚠️
-// ==========================================
-const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf98WzgO2eAvPXBSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9y6QgmS/F+EPNDkUgO2YsRBdpKhRv5J3Eh0PIfF6kt4QwdB04t89/1O/w1cDnyilFU=';
-const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
-// ==========================================
 
 // GitHub 設定
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -198,7 +172,7 @@ function getLightLevel(delta_e, di) {
 }
 
 /**
- * 完整 SHPI V3 計算（單日）
+ * 完整 SHPI V3 計算（單日）- 含詳細 LOG
  */
 function calculateSHPI(tempOut, humOut) {
   // 步驟1：飽和水蒸氣壓
@@ -218,6 +192,21 @@ function calculateSHPI(tempOut, humOut) {
   
   // 燈號判定
   const light = getLightLevel(delta_e, di);
+  
+  // ============================================================
+  // ✅ 詳細 LOG 顯示
+  // ============================================================
+  console.log(`\n   📊 ===== SHPI V3 計算結果 =====`);
+  console.log(`   🌡️  氣溫: ${Math.round(tempOut)}℃`);
+  console.log(`   💧  室外濕度: ${Math.round(humOut)}%`);
+  console.log(`   📐  飽和水蒸氣壓 (e_s): ${Math.round(e_s * 1000) / 1000} kPa`);
+  console.log(`   📤  室外水蒸氣壓 (e_out): ${Math.round(e_out * 1000) / 1000} kPa`);
+  console.log(`   📥  室內水蒸氣壓 (e_in): ${Math.round(e_in * 1000) / 1000} kPa`);
+  console.log(`   📊  室內相對濕度 (RH_in): ${Math.round(100 * e_in / ES_26)}%`);
+  console.log(`   🔥  室內乾燥指數 (DI): ${Math.round(di * 10) / 10}`);
+  console.log(`   ⚡  絕對濕度壓力指數 (Δe): ${Math.round(delta_e * 1000) / 1000} kPa`);
+  console.log(`   🚦  燈號: ${light.emoji} ${light.name}`);
+  console.log(`   ${'='.repeat(40)}`);
   
   return {
     tempOut: Math.round(tempOut),
