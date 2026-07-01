@@ -248,6 +248,43 @@ function calculateSHPI(tempOut, humOut) {
 }
 
 // ==========================================
+// 台灣時間工具函數
+// ==========================================
+
+/**
+ * 取得台灣時間的 Date 物件
+ */
+function getTaiwanTime() {
+  const now = new Date();
+  return new Date(now.getTime() + 8 * 60 * 60 * 1000);
+}
+
+/**
+ * 取得台灣時間日期字串 (YYYY-MM-DD)
+ */
+function getTaiwanDateString(offset = 0) {
+  const taiwanTime = getTaiwanTime();
+  const year = taiwanTime.getUTCFullYear();
+  const month = taiwanTime.getUTCMonth() + 1;
+  const day = taiwanTime.getUTCDate() + offset;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * 取得台灣時間小時
+ */
+function getTaiwanHour() {
+  return getTaiwanTime().getUTCHours();
+}
+
+/**
+ * 取得台灣時間分鐘
+ */
+function getTaiwanMinute() {
+  return getTaiwanTime().getUTCMinutes();
+}
+
+// ==========================================
 // 中央氣象署 API - 獲取 14:00 的預報資料（含完整結構 LOG）
 // ==========================================
 
@@ -335,12 +372,10 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     }
     
     // ============================================================
-    // ✅ 計算目標日期字串 (YYYY-MM-DD)
+    // ✅ 使用台灣時間計算目標日期 (YYYY-MM-DD)
     // ============================================================
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + dateOffset);
-    const targetDateStr = targetDate.toISOString().split('T')[0];
-    console.log(`📅 目標日期: ${targetDateStr}`);
+    const targetDateStr = getTaiwanDateString(dateOffset);
+    console.log(`📅 目標日期 (台灣時間): ${targetDateStr}`);
     
     // ============================================================
     // ✅ 列出所有可用的時間點（供驗證）
@@ -424,7 +459,8 @@ async function getCurrentWeather(city) {
         console.log(`📊 原始數據: 溫度=${temp}℃, 濕度=${humidity}%`);
         console.log(`✅ 即時觀測成功`);
         const now = new Date();
-        const timeStr = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`;
+        const taiwanTime = getTaiwanTime();
+        const timeStr = `${taiwanTime.getUTCFullYear()}/${taiwanTime.getUTCMonth()+1}/${taiwanTime.getUTCDate()} ${String(taiwanTime.getUTCHours()).padStart(2,'0')}:${String(taiwanTime.getUTCMinutes()).padStart(2,'0')}`;
         return {
           temp, humidity,
           dataTime: timeStr + " (即時觀測)"
@@ -481,20 +517,18 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
 }
 
 // ==========================================
-// 計算起始偏移量（根據當前時間）
+// 計算起始偏移量（根據台灣時間）
 // ==========================================
 
 function calculateStartOffset() {
-  const now = new Date();
-  const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  const hours = taiwanTime.getUTCHours();
-  const minutes = taiwanTime.getUTCMinutes();
+  const hours = getTaiwanHour();
+  const minutes = getTaiwanMinute();
   
   if (hours >= 18) {
-    console.log(`⏰ 當前時間 ${hours}:${minutes}，已過 14:00，從 +1 天（明天）開始抓取預報`);
+    console.log(`⏰ 台灣時間 ${hours}:${minutes}，已過 18:00，從 +1 天（明天）開始抓取預報`);
     return 1;
   } else {
-    console.log(`⏰ 當前時間 ${hours}:${minutes}，尚未過 18:00，從 +0 天（今天）開始抓取（必要時改用即時觀測）`);
+    console.log(`⏰ 台灣時間 ${hours}:${minutes}，尚未過 18:00，從 +0 天（今天）開始抓取（必要時改用即時觀測）`);
     return 0;
   }
 }
@@ -642,9 +676,8 @@ async function generatePage1Flex(startOffset = 0) {
       }
     }
   } else {
-    // ⭐ 備用：使用當前台灣時間 + startOffset
-    const now = new Date();
-    const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    // ⭐ 備用：使用台灣時間 + startOffset
+    const taiwanTime = getTaiwanTime();
     const year = taiwanTime.getUTCFullYear();
     const month = taiwanTime.getUTCMonth() + 1;
     const day = taiwanTime.getUTCDate() + startOffset;
@@ -839,10 +872,10 @@ async function generatePage2Flex() {
 // ==========================================
 
 async function precomputeAndCache() {
-  // ✅ 根據當前時間動態計算起始偏移量
+  // ✅ 根據台灣時間動態計算起始偏移量
   const startOffset = calculateStartOffset();
   
-  console.log(`\n🔄 開始預計算快取 - ${new Date().toLocaleString()}`);
+  console.log(`\n🔄 開始預計算快取 - ${getTaiwanTime().toLocaleString()}`);
   console.log(`📅 從 +${startOffset} 天開始抓取`);
   const startTime = Date.now();
   
@@ -1160,7 +1193,7 @@ let lastPublishDate = null;
 
 function checkAndPublish() {
   const now = new Date();
-  const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const taiwanTime = getTaiwanTime();
   const hours = taiwanTime.getUTCHours();
   const minutes = taiwanTime.getUTCMinutes();
   
@@ -1193,7 +1226,7 @@ cron.schedule('0 18 * * *', () => {
 });
 
 console.log('📅 已設定定時預計算任務：每天 18:00 (台灣時間)');
-console.log('📌 系統會根據執行時間自動決定從 +0 或 +1 天開始抓取');
+console.log('📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始抓取');
 
 // ==========================================
 // 啟動伺服器
@@ -1217,7 +1250,7 @@ console.log('📌 系統會根據執行時間自動決定從 +0 或 +1 天開始
     console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
     console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
     console.log(`⏰ 預計算時間：每天 18:00 (台灣時間)`);
-    console.log(`📌 系統會根據執行時間自動決定從 +0 或 +1 天開始抓取`);
+    console.log(`📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始抓取`);
     console.log(`🕐 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
     console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
