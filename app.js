@@ -1,3 +1,4 @@
+
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -247,7 +248,7 @@ function calculateSHPI(tempOut, humOut) {
 }
 
 // ==========================================
-// 中央氣象署 API - 獲取 14:00 的預報資料
+// 中央氣象署 API - 獲取 14:00 的預報資料（含完整結構 LOG）
 // ==========================================
 
 async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
@@ -258,6 +259,43 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-089?Authorization=${CWA_API_KEY}&format=JSON&LocationName=${encodeURIComponent(city.apiName)}`;
     const response = await axios.get(url, { timeout: 15000 });
     const data = response.data;
+    
+    // ============================================================
+    // ✅ 完整 API 回應結構檢查 LOG
+    // ============================================================
+    console.log(`\n   📦 ===== API 完整回應結構檢查 =====`);
+    console.log(`   🔍 success: ${data.success}`);
+    console.log(`   🔍 records 存在: ${!!data.records}`);
+    
+    if (data.records) {
+      console.log(`   🔍 Locations 存在: ${!!data.records.Locations}`);
+      if (data.records.Locations) {
+        console.log(`   🔍 Locations 數量: ${data.records.Locations.length}`);
+        for (let i = 0; i < data.records.Locations.length; i++) {
+          const locSet = data.records.Locations[i];
+          console.log(`   📍 Location[${i}]: ${locSet.LocationsName || '無名稱'}`);
+          if (locSet.Location) {
+            console.log(`      📍 包含 ${locSet.Location.length} 個城市`);
+            for (const loc of locSet.Location) {
+              if (loc.LocationName === city.apiName) {
+                console.log(`      ✅ 找到目標城市: ${loc.LocationName}`);
+                if (loc.WeatherElement) {
+                  console.log(`      📊 WeatherElement 數量: ${loc.WeatherElement.length}`);
+                  for (const elem of loc.WeatherElement) {
+                    console.log(`         📊 ${elem.ElementName}: ${elem.Time ? elem.Time.length : 0} 筆資料`);
+                    if (elem.Time && elem.Time.length > 0) {
+                      const times = elem.Time.slice(0, 3).map(t => t.DataTime).join(', ');
+                      console.log(`            🕐 時間範例: ${times}${elem.Time.length > 3 ? ' ...' : ''}`);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    console.log(`   ${'='.repeat(50)}`);
     
     if (data.success !== "true") {
       console.log(`❌ API 回應失敗: ${data.success}`);
@@ -305,12 +343,19 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     console.log(`📅 目標日期: ${targetDateStr}`);
     
     // ============================================================
+    // ✅ 列出所有可用的時間點（供驗證）
+    // ============================================================
+    console.log(`\n   📋 ===== ${city.displayName} 所有可用時間點 (溫度) =====`);
+    const allTimes = tempElem.Time.map(t => t.DataTime).join(', ');
+    console.log(`   🕐 ${allTimes}`);
+    console.log(`   ${'='.repeat(50)}`);
+    
+    // ============================================================
     // ✅ 同時比對日期和時間
     // ============================================================
     let tempValue = null, humValue = null;
     let actualDataTime = null;
     
-    // 先找溫度（同時比對日期和時間）
     for (const t of tempElem.Time) {
       const dataTime = t.DataTime;
       if (dataTime) {
@@ -321,17 +366,18 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
           if (datePart === targetDateStr && parseInt(timePart) === targetHour) {
             tempValue = t.ElementValue?.[0]?.Temperature;
             actualDataTime = dataTime;
+            console.log(`✅ 找到匹配: ${dataTime} → 溫度=${tempValue}℃`);
             break;
           }
         }
       }
     }
     
-    // 再找濕度（使用相同的 actualDataTime）
     if (actualDataTime) {
       for (const h of humElem.Time) {
         if (h.DataTime === actualDataTime) {
           humValue = h.ElementValue?.[0]?.RelativeHumidity;
+          console.log(`✅ 找到匹配濕度: ${actualDataTime} → 濕度=${humValue}%`);
           break;
         }
       }
@@ -350,6 +396,7 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     }
     
     console.log(`❌ 找不到 ${targetDateStr} ${targetHour}:00 的數據`);
+    console.log(`   💡 提示: 請檢查上方「所有可用時間點」列表，確認該時段是否存在`);
     return null;
   } catch (error) {
     console.error(`❌ API 錯誤: ${error.message}`);
@@ -393,7 +440,7 @@ async function getCurrentWeather(city) {
 }
 
 // ==========================================
-// 獲取天氣資料（支援即時觀測備援）
+// 獲取天氣資料（支援即時觀測備援 + 多時間點備援）
 // ==========================================
 
 async function getWeather(city, dateOffset = 0, targetHour = 14) {
@@ -404,6 +451,25 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
   if (!weather && dateOffset === 0) {
     console.log(`⚠️ 預報API失敗 (今天 14:00 已過或無資料)，嘗試使用即時觀測API`);
     weather = await getCurrentWeather(city);
+  }
+  
+  // ============================================================
+  // ✅ 如果 dateOffset > 0 且失敗，嘗試其他時間點
+  // ============================================================
+  if (!weather && dateOffset > 0) {
+    const fallbackHours = [12, 18, 20, 8];
+    console.log(`⚠️ ${city.displayName} dateOffset=${dateOffset} 的 ${targetHour}:00 無資料`);
+    console.log(`   🔄 嘗試備用時間點: ${fallbackHours.join(', ')}`);
+    
+    for (const hour of fallbackHours) {
+      if (hour === targetHour) continue;
+      console.log(`   🔄 嘗試 ${hour}:00 ...`);
+      weather = await getForecastAtTime(city, dateOffset, hour);
+      if (weather) {
+        console.log(`   ✅ 成功從 ${hour}:00 取得資料`);
+        break;
+      }
+    }
   }
   
   if (!weather) {
@@ -424,8 +490,6 @@ function calculateStartOffset() {
   const hours = taiwanTime.getUTCHours();
   const minutes = taiwanTime.getUTCMinutes();
   
-  // 如果現在時間 >= 18:00，表示當天 14:00 已過，從明天 (+1) 開始抓
-  // 如果現在時間 < 18:00，從今天 (+0) 開始抓（但可能需改用即時觀測）
   if (hours >= 18) {
     console.log(`⏰ 當前時間 ${hours}:${minutes}，已過 14:00，從 +1 天（明天）開始抓取預報`);
     return 1;
