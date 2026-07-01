@@ -436,7 +436,7 @@ function calculateStartOffset() {
 }
 
 // ==========================================
-// 計算城市 2 天預報（支援起始偏移）
+// 計算城市 2 天預報（支援起始偏移 + 詳細狀態 LOG）
 // ==========================================
 
 async function calculateCityTwoDays(city, startOffset = 0, targetHour = 14) {
@@ -447,12 +447,32 @@ async function calculateCityTwoDays(city, startOffset = 0, targetHour = 14) {
   const weather0 = await getWeather(city, startOffset, targetHour);
   const weather1 = await getWeather(city, startOffset + 1, targetHour);
   
+  // ============================================================
+  // ✅ 詳細 LOG：確認 weather0 和 weather1 的狀態
+  // ============================================================
+  console.log(`\n   🔍 ${city.displayName} weather0: ${weather0 ? '✅ 有資料' : '❌ 無資料'}`);
+  if (weather0) {
+    console.log(`      🌡️  溫度: ${weather0.temp}℃, 💧 濕度: ${weather0.humidity}%`);
+    console.log(`      📅  資料時間: ${weather0.dataTime}`);
+  }
+  console.log(`   🔍 ${city.displayName} weather1: ${weather1 ? '✅ 有資料' : '❌ 無資料'}`);
+  if (weather1) {
+    console.log(`      🌡️  溫度: ${weather1.temp}℃, 💧 濕度: ${weather1.humidity}%`);
+    console.log(`      📅  資料時間: ${weather1.dataTime}`);
+  }
+  
   const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity) : null;
   const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity) : null;
   
+  // ============================================================
+  // ✅ 計算完成的確認 LOG
+  // ============================================================
+  console.log(`\n   ✅ ${city.displayName} 兩天計算完成:`);
+  console.log(`      📅 第1天: ${day0 ? day0.light.emoji + ' ' + day0.light.name : '❓ 無資料'}`);
+  console.log(`      📅 第2天: ${day1 ? day1.light.emoji + ' ' + day1.light.name : '❓ 無資料'}`);
+  
   let dataTime = weather0?.dataTime || weather1?.dataTime || null;
   
-  console.log(`\n📊 ${city.displayName} 兩天燈號: ${day0 ? day0.light.emoji : '❓'} ${day1 ? day1.light.emoji : '❓'}`);
   console.log(`${'='.repeat(60)}\n`);
   
   return {
