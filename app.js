@@ -585,39 +585,39 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// 燈號說明對照表
+// 燈號說明對照表（完全依照 DOCX 原文）
 // ==========================================
 const LIGHT_DESCRIPTIONS = {
   "綠燈": {
     title: "🟢 綠燈：動態平衡 (Low Impact)",
     desc: "環境濕度與角質層處於自然緩衝區，肌膚可維持恆定。",
     suggestions: [
-      "• 避免過度保養（Over-treatment），暫停使用厚重脂質，以免阻斷肌膚正常生理代謝信號。",
-      "• 弱敏肌：環境濕度不構成皮膚壓力，若出現泛紅、乾癢，請優先排除天氣因素，檢視其他潛在刺激源。"
+      "一般保養建議： 避免過度保養（Over-treatment）。暫停使用厚重脂質，以免阻斷肌膚正常生理代謝信號。",
+      "弱敏肌族群提醒： 環境濕度不構成皮膚壓力，若出現泛紅、乾癢，請優先排除天氣因素，檢視其他潛在刺激源。"
     ]
   },
   "黃燈": {
     title: "🟡 黃燈：慢性耗竭 (Moderate Impact)",
     desc: "室內外濕度變化加大，皮膚細胞頻繁調節導致過勞，下午或傍晚易產生緊繃或過度出油。",
     suggestions: [
-      "• 避免使用清潔力過強的洗劑，以免加重皮脂膜及角質層的損耗。",
-      "• 弱敏肌：暫停去角質動作，並避免使用酸類保養品，保留肌膚物理緩衝厚度。"
+      "一般保養建議： 避免使用清潔力過強的洗劑，以免加重皮脂膜及角質層的損耗。",
+      "弱敏肌族群提醒： 暫停去角質動作，並避免使用酸類保養品，保留肌膚物理緩衝厚度。"
     ]
   },
   "橘燈": {
     title: "🟠 橘燈：高壓衝擊 (High Impact)",
     desc: "室內外溫差過大，皮脂膜變性鬆動。皮膚易顯乾粗、暗沉；進出室內外瞬間，臉部易產生微熱、刺感或局部泛紅。",
     suggestions: [
-      "• 提防冷氣出風口的「強制風乾」效應，建議切換為修護型產品，輔助角質層鎖水。",
-      "• 弱敏肌：嚴禁使用「純水噴霧」降溫，以免加劇「越噴越乾、越噴越紅」的惡性循環。"
+      "一般保養建議： 提防冷氣出風口的「強制風乾」效應，建議切換為修護型產品，輔助角質層鎖水。",
+      "弱敏肌族群提醒： 嚴禁使用「純水噴霧」降溫，以免加劇「越噴越乾、越噴越紅」的惡性循環。"
     ]
   },
   "紅燈": {
     title: "🔴 紅燈：極端警報 (Dangerous Impact)",
     desc: "溫濕度變化突破防禦極限，極易引發乾癢、緊繃刺痛或局部脫屑。",
     suggestions: [
-      "• 常規產品保濕力已不足以抵禦環境抽水，必須採用高能修護與封閉性保濕手段。",
-      "• 弱敏肌：啟動「減法保養」！全面停用美白、高濃度維他命等功能性產品，避免任何可能引發刺激的成分。"
+      "一般保養建議： 常規產品保濕力已不足以抵禦環境抽水，必須採用高能修護與封閉性保濕手段。",
+      "弱敏肌族群提醒： 啟動「減法保養」！全面停用美白、高濃度維他命等功能性產品，避免任何可能引發刺激的成分。"
     ]
   }
 };
@@ -673,11 +673,13 @@ function getErrorFlexMessage() {
 }
 
 // ==========================================
-// 第一頁：Flex Message（6都預報表格 - 2天 + 動態燈號說明）
+// 第一頁：Flex Message（6都預報表格 - 2天）
 // ==========================================
 async function generatePage1Flex(startOffset = 0) {
   const citiesData = [];
   let globalDataTime = null;
+  const day0Lights = new Set();
+  const allLightNames = ["綠燈", "黃燈", "橘燈", "紅燈"];
   
   for (const city of CITIES) {
     const twoDays = await calculateCityTwoDays(city, startOffset, 14);
@@ -685,6 +687,12 @@ async function generatePage1Flex(startOffset = 0) {
     
     if (!globalDataTime && twoDays.dataTime) {
       globalDataTime = twoDays.dataTime;
+    }
+    
+    // 收集第一天出現的燈號
+    const day0 = twoDays.days[0];
+    if (day0 && day0.light && allLightNames.includes(day0.light.name)) {
+      day0Lights.add(day0.light.name);
     }
   }
   
@@ -724,25 +732,6 @@ async function generatePage1Flex(startOffset = 0) {
     day1Label = `${d.getMonth()+1}/${d.getDate()}`;
     
     console.log(`⚠️ 使用備用日期: ${day0Label} ~ ${day1Label}`);
-  }
-  
-  // ============================================================
-  // ✅ 收集兩天各自出現的燈號種類
-  // ============================================================
-  const day0Lights = new Set();
-  const day1Lights = new Set();
-  const allLightNames = ["綠燈", "黃燈", "橘燈", "紅燈"];
-  
-  for (const cityData of citiesData) {
-    const day0 = cityData.days[0];
-    const day1 = cityData.days[1];
-    
-    if (day0 && day0.light && allLightNames.includes(day0.light.name)) {
-      day0Lights.add(day0.light.name);
-    }
-    if (day1 && day1.light && allLightNames.includes(day1.light.name)) {
-      day1Lights.add(day1.light.name);
-    }
   }
   
   // ============================================================
@@ -791,76 +780,93 @@ async function generatePage1Flex(startOffset = 0) {
   dataTimeStr = dataTimeStr.replace(/\+08:00/g, '').trim();
   
   // ============================================================
-  // ✅ 建立 Body 內容
+  // ✅ 建立 Body 內容（只放表格，不放燈號說明）
   // ============================================================
   const bodyContents = [...tableRows];
   
-  // 分隔線
-  bodyContents.push({ type: "separator", margin: "md" });
-  
   // ============================================================
-  // ✅ 燈號圖例（只顯示當日出現的燈號）
+  // ✅ Footer 內容
   // ============================================================
-  const lightEmojis = {
-    "綠燈": "🟢",
-    "黃燈": "🟡",
-    "橘燈": "🟠",
-    "紅燈": "🔴"
-  };
-  const lightColors = {
-    "綠燈": "#00CC00",
-    "黃燈": "#FFD700",
-    "橘燈": "#FF8C00",
-    "紅燈": "#FF0000"
-  };
+  const footerContents = [
+    { type: "separator" },
+    { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center" },
+    { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "md", color: "#999999", align: "center" },
+    { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
+    { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
+  ];
   
-  // 第1天的燈號圖例
-  const day0LightList = Array.from(day0Lights).filter(name => allLightNames.includes(name));
-  if (day0LightList.length > 0) {
-    const emojis = day0LightList.map(name => 
-      `${lightEmojis[name]} ${name}`
-    ).join('  ');
-    bodyContents.push({
-      type: "text",
-      text: `📅 ${day0Label} 燈號：${emojis}`,
-      size: "sm",
-      color: "#666666",
+  if (hasError) {
+    footerContents.splice(3, 0, { 
+      type: "text", 
+      text: "⚠️ 部分城市資料取得失敗，顯示「❓」表示暫無資料", 
+      size: "sm", 
+      color: "#FF6600", 
+      align: "center",
       wrap: true
     });
   }
   
-  // 第2天的燈號圖例
-  const day1LightList = Array.from(day1Lights).filter(name => allLightNames.includes(name));
-  if (day1LightList.length > 0) {
-    const emojis = day1LightList.map(name => 
-      `${lightEmojis[name]} ${name}`
-    ).join('  ');
+  // ============================================================
+  // ✅ 回傳 Flex Message（包含 day0Lights 供第二頁使用）
+  // ============================================================
+  return {
+    page1: {
+      type: "flex",
+      altText: `🌡️💧 皮膚濕度壓力指數 ${day0Label}~${day1Label}`,
+      contents: {
+        type: "bubble",
+        size: "mega",
+        header: {
+          type: "box",
+          layout: "vertical",
+          contents: [
+            { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "xl", color: "#ffffff" },
+            { type: "text", text: `預報日期 ${day0Label} ~ ${day1Label} (下午2點數據)`, size: "md", color: "#dddddd", margin: "xs" }
+          ],
+          backgroundColor: "#667eea",
+          paddingAll: "20px"
+        },
+        body: {
+          type: "box",
+          layout: "vertical",
+          spacing: "sm",
+          contents: bodyContents,
+          paddingAll: "20px"
+        },
+        footer: {
+          type: "box",
+          layout: "vertical",
+          spacing: "xs",
+          contents: footerContents,
+          paddingAll: "12px"
+        }
+      }
+    },
+    day0Lights: day0Lights
+  };
+}
+
+// ==========================================
+// 第二頁：燈號說明與保健建議（以 DOCX 內容為準，保留查詢指令與訂閱管理）
+// ==========================================
+async function generatePage2Flex(day0Lights = new Set()) {
+  // 只顯示第一天出現的燈號
+  const validLights = Array.from(day0Lights).filter(name => ["綠燈", "黃燈", "橘燈", "紅燈"].includes(name));
+  
+  // 建立 body 內容
+  const bodyContents = [];
+  
+  if (validLights.length === 0) {
+    // 若無燈號資料，顯示提示
     bodyContents.push({
       type: "text",
-      text: `📅 ${day1Label} 燈號：${emojis}`,
-      size: "sm",
-      color: "#666666",
-      wrap: true
-    });
-  }
-  
-  bodyContents.push({ type: "separator", margin: "md" });
-  
-  // ============================================================
-  // ✅ 動態燈號說明（只顯示當日出現的燈號）
-  // ============================================================
-  const allDayLights = new Set([...day0Lights, ...day1Lights]);
-  const validLights = Array.from(allDayLights).filter(name => allLightNames.includes(name));
-  
-  if (validLights.length > 0) {
-    bodyContents.push({
-      type: "text",
-      text: "📋 燈號說明與建議",
-      weight: "bold",
+      text: "📋 今日尚無燈號資料，請稍後再查詢。",
       size: "md",
-      margin: "sm"
+      color: "#666666",
+      wrap: true
     });
-    
+  } else {
+    // 依序顯示每個燈號的說明
     for (const lightName of validLights) {
       const info = LIGHT_DESCRIPTIONS[lightName];
       if (info) {
@@ -868,8 +874,13 @@ async function generatePage1Flex(startOffset = 0) {
           type: "text",
           text: info.title,
           weight: "bold",
-          size: "sm",
-          color: lightColors[lightName] || "#666666",
+          size: "md",
+          color: {
+            "綠燈": "#00CC00",
+            "黃燈": "#FFD700",
+            "橘燈": "#FF8C00",
+            "紅燈": "#FF0000"
+          }[lightName] || "#666666",
           margin: "sm"
         });
         bodyContents.push({
@@ -883,46 +894,76 @@ async function generatePage1Flex(startOffset = 0) {
           bodyContents.push({
             type: "text",
             text: suggestion,
-            size: "xs",
+            size: "sm",
             color: "#666666",
             wrap: true
           });
+        }
+        // 燈號之間加分隔線（最後一個不加）
+        if (lightName !== validLights[validLights.length - 1]) {
+          bodyContents.push({ type: "separator", margin: "md" });
         }
       }
     }
   }
   
   // ============================================================
-  // ✅ Footer 內容
+  // ✅ 加入分隔線
   // ============================================================
-  const footerContents = [
-    { type: "separator" },
-    { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center" },
-    { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "md", color: "#999999", align: "center" }
-  ];
-  
-  if (hasError) {
-    footerContents.push({ 
-      type: "text", 
-      text: "⚠️ 部分城市資料取得失敗，顯示「❓」表示暫無資料", 
-      size: "sm", 
-      color: "#FF6600", 
-      align: "center",
-      wrap: true
-    });
-  }
-  
-  footerContents.push(
-    { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
-    { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看完整燈號說明", text: "詳細說明" }, margin: "md", color: "#667eea" }
-  );
+  bodyContents.push({ type: "separator", margin: "md" });
   
   // ============================================================
-  // ✅ 回傳 Flex Message
+  // ✅ 保留：查詢指令
   // ============================================================
+  bodyContents.push({
+    type: "text",
+    text: "🔍 查詢指令",
+    weight: "bold",
+    size: "md"
+  });
+  bodyContents.push({
+    type: "text",
+    text: "• 輸入「全台」查看六都2天預報",
+    size: "sm",
+    color: "#666666",
+    wrap: true
+  });
+  bodyContents.push({
+    type: "text",
+    text: "• 輸入「詳細說明」查看本頁面",
+    size: "sm",
+    color: "#666666",
+    wrap: true
+  });
+  
+  // ============================================================
+  // ✅ 保留：訂閱管理
+  // ============================================================
+  bodyContents.push({ type: "separator", margin: "md" });
+  bodyContents.push({
+    type: "text",
+    text: "🔔 訂閱管理",
+    weight: "bold",
+    size: "md"
+  });
+  bodyContents.push({
+    type: "text",
+    text: "• 輸入「加入訂閱」開啟每日提醒",
+    size: "sm",
+    color: "#666666",
+    wrap: true
+  });
+  bodyContents.push({
+    type: "text",
+    text: "• 輸入「取消訂閱」關閉每日提醒",
+    size: "sm",
+    color: "#666666",
+    wrap: true
+  });
+  
   return {
     type: "flex",
-    altText: `🌡️💧 皮膚濕度壓力指數 ${day0Label}~${day1Label}`,
+    altText: "📋 燈號說明與保健建議",
     contents: {
       type: "bubble",
       size: "mega",
@@ -930,8 +971,7 @@ async function generatePage1Flex(startOffset = 0) {
         type: "box",
         layout: "vertical",
         contents: [
-          { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "xl", color: "#ffffff" },
-          { type: "text", text: `預報日期 ${day0Label} ~ ${day1Label} (下午2點數據)`, size: "md", color: "#dddddd", margin: "xs" }
+          { type: "text", text: "📋 燈號說明與保健建議", weight: "bold", size: "xl", color: "#ffffff" }
         ],
         backgroundColor: "#667eea",
         paddingAll: "20px"
@@ -946,76 +986,10 @@ async function generatePage1Flex(startOffset = 0) {
       footer: {
         type: "box",
         layout: "vertical",
-        spacing: "xs",
-        contents: footerContents,
-        paddingAll: "12px"
-      }
-    }
-  };
-}
-
-// ==========================================
-// 第二頁：完整使用說明與保健建議
-// ==========================================
-async function generatePage2Flex() {
-  return {
-    type: "flex",
-    altText: "皮膚保健建議與使用說明",
-    contents: {
-      type: "bubble",
-      size: "mega",
-      header: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          { type: "text", text: "📋 使用說明與保健建議", weight: "bold", size: "xl", color: "#ffffff" }
-        ],
-        backgroundColor: "#667eea",
-        paddingAll: "20px"
-      },
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "md",
-        contents: [
-          { type: "text", text: "🚦 燈號意義", weight: "bold", size: "lg" },
-          { type: "text", text: "🟢 綠燈", weight: "bold", size: "lg", color: "#00CC00" },
-          { type: "text", text: "Δe < 0.8 kPa 且 DI < 44\n舒適區：水分散失與保留達到相對動態平衡", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "🟡 黃燈", weight: "bold", size: "lg", color: "#FFD700", margin: "xs" },
-          { type: "text", text: "0.8 ≤ Δe < 1.2 或 44 ≤ DI < 52\n溫和濕度落差，建議基礎保濕", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "🟠 橘燈", weight: "bold", size: "lg", color: "#FF8C00", margin: "xs" },
-          { type: "text", text: "1.2 ≤ Δe < 1.6 或 52 ≤ DI < 58\n顯著濕度衝擊，加強屏障修護", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "🔴 紅燈", weight: "bold", size: "lg", color: "#FF0000", margin: "xs" },
-          { type: "text", text: "Δe ≥ 1.6 或 DI ≥ 58\n劇烈滲透壓變化，積極防護", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "❓ 暫無資料", weight: "bold", size: "lg", color: "#999999", margin: "xs" },
-          { type: "text", text: "該時段無法取得天氣資料，請稍後再試", size: "md", color: "#666666", wrap: true },
-          { type: "separator", margin: "md" },
-          
-          { type: "text", text: "💡 保健建議", weight: "bold", size: "lg" },
-          { type: "text", text: "🟢 綠燈：維持日常基礎保養", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "🟡 黃燈：加強保濕，注意室內濕度", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "🟠 橘燈：減少戶外停留，加強屏障修護", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "🔴 紅燈：避免進出冷熱環境，立即保濕防護", size: "md", color: "#666666", wrap: true },
-          { type: "separator", margin: "md" },
-          
-          { type: "text", text: "🔍 查詢指令", weight: "bold", size: "lg" },
-          { type: "text", text: "• 輸入「全台」查看六都2天預報", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "md", color: "#666666", wrap: true },
-          { type: "separator", margin: "md" },
-          
-          { type: "text", text: "🔔 訂閱管理", weight: "bold", size: "lg" },
-          { type: "text", text: "• 輸入「加入訂閱」開啟每日提醒", size: "md", color: "#666666", wrap: true },
-          { type: "text", text: "• 輸入「取消訂閱」關閉每日提醒", size: "md", color: "#666666", wrap: true }
-        ],
-        paddingAll: "20px"
-      },
-      footer: {
-        type: "box",
-        layout: "vertical",
         contents: [
           { type: "separator" },
-          { type: "text", text: "📊 中央氣象署 | 室內濕度推算：SHPI V3", size: "sm", color: "#999999", align: "center" },
-          { type: "text", text: "📖 科學依據：Denda et al. (2002)、Tetens Equation", size: "sm", color: "#999999", align: "center" }
+          { type: "text", text: "📊 皮膚壓力指數 (SHPI) 燈號保健建議", size: "xs", color: "#999999", align: "center" },
+          { type: "text", text: "📖 科學依據：Denda et al. (2002)", size: "xs", color: "#999999", align: "center" }
         ],
         paddingAll: "12px"
       }
@@ -1036,8 +1010,13 @@ async function precomputeAndCache() {
   const startTime = Date.now();
   
   try {
-    const page1 = await generatePage1Flex(startOffset);
-    const page2 = await generatePage2Flex();
+    // ✅ 先產生第一頁，取得 day0Lights
+    const page1Result = await generatePage1Flex(startOffset);
+    const page1 = page1Result.page1;
+    const day0Lights = page1Result.day0Lights || new Set();
+    
+    // ✅ 產生第二頁，傳入 day0Lights
+    const page2 = await generatePage2Flex(day0Lights);
     
     cachedForecast = { page1, page2 };
     lastCacheTime = new Date();
@@ -1286,7 +1265,13 @@ app.post('/webhook', async (req, res) => {
         }
         
         if (input === '詳細說明') {
-          const page2 = await generatePage2Flex();
+          // ✅ 從快取中取得 day0Lights（或重新計算）
+          const cache = await getCachedForecast();
+          // 重新計算 day0Lights
+          const startOffset = calculateStartOffset();
+          const page1Result = await generatePage1Flex(startOffset);
+          const day0Lights = page1Result.day0Lights || new Set();
+          const page2 = await generatePage2Flex(day0Lights);
           await replyFlexMessage(replyToken, page2);
           continue;
         }
