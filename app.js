@@ -1,3 +1,4 @@
+
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -433,7 +434,7 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     console.log(`   💡 提示: 請檢查上方「所有可用時間點」列表，確認該時段是否存在`);
     return null;
   } catch (error) {
-    console.error(`❌ API 錯誤: ${error.message}`);
+    console.error(`❌ ${city.displayName} getForecastAtTime 錯誤: ${error.message}`);
     return null;
   }
 }
@@ -468,50 +469,56 @@ async function getCurrentWeather(city) {
     console.log(`❌ 找不到 ${city.name} 的即時觀測資料`);
     return null;
   } catch (error) {
-    console.error(`❌ 即時API錯誤: ${error.message}`);
+    console.error(`❌ ${city.displayName} getCurrentWeather 錯誤: ${error.message}`);
     return null;
   }
 }
 
 // ==========================================
-// 獲取天氣資料（支援即時觀測備援 + 多時間點備援）
+// 獲取天氣資料（支援即時觀測備援 + 多時間點備援 + 錯誤處理）
 // ==========================================
 
 async function getWeather(city, dateOffset = 0, targetHour = 14) {
-  // 先嘗試從預報 API 抓取
-  let weather = await getForecastAtTime(city, dateOffset, targetHour);
-  
-  // ✅ 如果預報 API 失敗，且 dateOffset === 0（今天），改用即時觀測
-  if (!weather && dateOffset === 0) {
-    console.log(`⚠️ 預報API失敗 (今天 14:00 已過或無資料)，嘗試使用即時觀測API`);
-    weather = await getCurrentWeather(city);
-  }
-  
-  // ============================================================
-  // ✅ 如果 dateOffset > 0 且失敗，嘗試其他時間點
-  // ============================================================
-  if (!weather && dateOffset > 0) {
-    const fallbackHours = [12, 18, 20, 8];
-    console.log(`⚠️ ${city.displayName} dateOffset=${dateOffset} 的 ${targetHour}:00 無資料`);
-    console.log(`   🔄 嘗試備用時間點: ${fallbackHours.join(', ')}`);
+  try {
+    // 先嘗試從預報 API 抓取
+    let weather = await getForecastAtTime(city, dateOffset, targetHour);
     
-    for (const hour of fallbackHours) {
-      if (hour === targetHour) continue;
-      console.log(`   🔄 嘗試 ${hour}:00 ...`);
-      weather = await getForecastAtTime(city, dateOffset, hour);
-      if (weather) {
-        console.log(`   ✅ 成功從 ${hour}:00 取得資料`);
-        break;
+    // ✅ 如果預報 API 失敗，且 dateOffset === 0（今天），改用即時觀測
+    if (!weather && dateOffset === 0) {
+      console.log(`⚠️ 預報API失敗 (今天 14:00 已過或無資料)，嘗試使用即時觀測API`);
+      weather = await getCurrentWeather(city);
+    }
+    
+    // ============================================================
+    // ✅ 如果 dateOffset > 0 且失敗，嘗試其他時間點
+    // ============================================================
+    if (!weather && dateOffset > 0) {
+      const fallbackHours = [12, 18, 20, 8];
+      console.log(`⚠️ ${city.displayName} dateOffset=${dateOffset} 的 ${targetHour}:00 無資料`);
+      console.log(`   🔄 嘗試備用時間點: ${fallbackHours.join(', ')}`);
+      
+      for (const hour of fallbackHours) {
+        if (hour === targetHour) continue;
+        console.log(`   🔄 嘗試 ${hour}:00 ...`);
+        weather = await getForecastAtTime(city, dateOffset, hour);
+        if (weather) {
+          console.log(`   ✅ 成功從 ${hour}:00 取得資料`);
+          break;
+        }
       }
     }
-  }
-  
-  if (!weather) {
-    console.log(`❌ ${city.displayName} 所有 API 都失敗，標記為暫無資料`);
+    
+    if (!weather) {
+      console.log(`❌ ${city.displayName} 所有 API 都失敗，標記為暫無資料`);
+      return null;
+    }
+    
+    return weather;
+    
+  } catch (error) {
+    console.error(`❌ ${city.displayName} getWeather 發生錯誤:`, error.message);
     return null;
   }
-  
-  return weather;
 }
 
 // ==========================================
@@ -532,7 +539,7 @@ function calculateStartOffset() {
 }
 
 // ==========================================
-// 計算城市 2 天預報（支援起始偏移 + 詳細狀態 LOG）
+// 計算城市 2 天預報（支援起始偏移 + 詳細狀態 LOG + 錯誤處理）
 // ==========================================
 
 async function calculateCityTwoDays(city, startOffset = 0, targetHour = 14) {
@@ -540,42 +547,66 @@ async function calculateCityTwoDays(city, startOffset = 0, targetHour = 14) {
   console.log(`🏙️ 開始計算 ${city.displayName} 連續2天預報 (從 +${startOffset} 天開始)`);
   console.log(`${'='.repeat(60)}`);
   
-  const weather0 = await getWeather(city, startOffset, targetHour);
-  const weather1 = await getWeather(city, startOffset + 1, targetHour);
-  
-  // ============================================================
-  // ✅ 詳細 LOG：確認 weather0 和 weather1 的狀態
-  // ============================================================
-  console.log(`\n   🔍 ${city.displayName} weather0: ${weather0 ? '✅ 有資料' : '❌ 無資料'}`);
-  if (weather0) {
-    console.log(`      🌡️  溫度: ${weather0.temp}℃, 💧 濕度: ${weather0.humidity}%`);
-    console.log(`      📅  資料時間: ${weather0.dataTime}`);
+  try {
+    const weather0 = await getWeather(city, startOffset, targetHour);
+    const weather1 = await getWeather(city, startOffset + 1, targetHour);
+    
+    // ============================================================
+    // ✅ 詳細 LOG：確認 weather0 和 weather1 的狀態
+    // ============================================================
+    console.log(`\n   🔍 ${city.displayName} weather0: ${weather0 ? '✅ 有資料' : '❌ 無資料'}`);
+    if (weather0) {
+      console.log(`      🌡️  溫度: ${weather0.temp}℃, 💧 濕度: ${weather0.humidity}%`);
+      console.log(`      📅  資料時間: ${weather0.dataTime}`);
+    } else {
+      console.log(`      ⚠️  weather0 為 null，跳過計算`);
+    }
+    
+    console.log(`   🔍 ${city.displayName} weather1: ${weather1 ? '✅ 有資料' : '❌ 無資料'}`);
+    if (weather1) {
+      console.log(`      🌡️  溫度: ${weather1.temp}℃, 💧 濕度: ${weather1.humidity}%`);
+      console.log(`      📅  資料時間: ${weather1.dataTime}`);
+    } else {
+      console.log(`      ⚠️  weather1 為 null，跳過計算`);
+    }
+    
+    const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity) : null;
+    const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity) : null;
+    
+    // ============================================================
+    // ✅ 計算完成的確認 LOG
+    // ============================================================
+    console.log(`\n   ✅ ${city.displayName} 兩天計算完成:`);
+    console.log(`      📅 第1天: ${day0 ? day0.light.emoji + ' ' + day0.light.name : '❓ 無資料'}`);
+    console.log(`      📅 第2天: ${day1 ? day1.light.emoji + ' ' + day1.light.name : '❓ 無資料'}`);
+    
+    let dataTime = weather0?.dataTime || weather1?.dataTime || null;
+    
+    console.log(`${'='.repeat(60)}\n`);
+    
+    return {
+      city: city.displayName,
+      days: [day0, day1],
+      dataTime: dataTime
+    };
+    
+  } catch (error) {
+    // ============================================================
+    // ✅ 錯誤處理：記錄錯誤並回傳空結果，不中斷流程
+    // ============================================================
+    console.error(`\n❌❌❌ ${city.displayName} 計算過程中發生錯誤 ❌❌❌`);
+    console.error(`   錯誤類型: ${error.name || 'UnknownError'}`);
+    console.error(`   錯誤訊息: ${error.message}`);
+    console.error(`   錯誤堆疊: ${error.stack || '無堆疊資訊'}`);
+    console.log(`${'='.repeat(60)}\n`);
+    
+    // 回傳空的結果，避免中斷整個流程
+    return {
+      city: city.displayName,
+      days: [null, null],
+      dataTime: null
+    };
   }
-  console.log(`   🔍 ${city.displayName} weather1: ${weather1 ? '✅ 有資料' : '❌ 無資料'}`);
-  if (weather1) {
-    console.log(`      🌡️  溫度: ${weather1.temp}℃, 💧 濕度: ${weather1.humidity}%`);
-    console.log(`      📅  資料時間: ${weather1.dataTime}`);
-  }
-  
-  const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity) : null;
-  const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity) : null;
-  
-  // ============================================================
-  // ✅ 計算完成的確認 LOG
-  // ============================================================
-  console.log(`\n   ✅ ${city.displayName} 兩天計算完成:`);
-  console.log(`      📅 第1天: ${day0 ? day0.light.emoji + ' ' + day0.light.name : '❓ 無資料'}`);
-  console.log(`      📅 第2天: ${day1 ? day1.light.emoji + ' ' + day1.light.name : '❓ 無資料'}`);
-  
-  let dataTime = weather0?.dataTime || weather1?.dataTime || null;
-  
-  console.log(`${'='.repeat(60)}\n`);
-  
-  return {
-    city: city.displayName,
-    days: [day0, day1],
-    dataTime: dataTime
-  };
 }
 
 function getDateString(offset = 0) {
