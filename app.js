@@ -1,4 +1,3 @@
-
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -419,7 +418,7 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     }
     
     if (tempValue && humValue && actualDataTime) {
-      const formattedTime = actualDataTime.replace('T', ' ');
+      const formattedTime = actualDataTime.replace('T', ' ').replace(/\+08:00/g, '').trim();
       console.log(`📊 原始數據: 溫度=${tempValue}℃, 濕度=${humValue}%`);
       console.log(`📅 API DataTime: ${formattedTime}`);
       console.log(`✅ API 連線成功`);
@@ -458,7 +457,6 @@ async function getCurrentWeather(city) {
         const humidity = Math.round(parseFloat(matched.WeatherElement.RelativeHumidity));
         console.log(`📊 原始數據: 溫度=${temp}℃, 濕度=${humidity}%`);
         console.log(`✅ 即時觀測成功`);
-        const now = new Date();
         const taiwanTime = getTaiwanTime();
         const timeStr = `${taiwanTime.getUTCFullYear()}/${taiwanTime.getUTCMonth()+1}/${taiwanTime.getUTCDate()} ${String(taiwanTime.getUTCHours()).padStart(2,'0')}:${String(taiwanTime.getUTCMinutes()).padStart(2,'0')}`;
         return {
@@ -587,6 +585,44 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
+// 燈號說明對照表
+// ==========================================
+const LIGHT_DESCRIPTIONS = {
+  "綠燈": {
+    title: "🟢 綠燈：動態平衡 (Low Impact)",
+    desc: "環境濕度與角質層處於自然緩衝區，肌膚可維持恆定。",
+    suggestions: [
+      "• 避免過度保養（Over-treatment），暫停使用厚重脂質，以免阻斷肌膚正常生理代謝信號。",
+      "• 弱敏肌：環境濕度不構成皮膚壓力，若出現泛紅、乾癢，請優先排除天氣因素，檢視其他潛在刺激源。"
+    ]
+  },
+  "黃燈": {
+    title: "🟡 黃燈：慢性耗竭 (Moderate Impact)",
+    desc: "室內外濕度變化加大，皮膚細胞頻繁調節導致過勞，下午或傍晚易產生緊繃或過度出油。",
+    suggestions: [
+      "• 避免使用清潔力過強的洗劑，以免加重皮脂膜及角質層的損耗。",
+      "• 弱敏肌：暫停去角質動作，並避免使用酸類保養品，保留肌膚物理緩衝厚度。"
+    ]
+  },
+  "橘燈": {
+    title: "🟠 橘燈：高壓衝擊 (High Impact)",
+    desc: "室內外溫差過大，皮脂膜變性鬆動。皮膚易顯乾粗、暗沉；進出室內外瞬間，臉部易產生微熱、刺感或局部泛紅。",
+    suggestions: [
+      "• 提防冷氣出風口的「強制風乾」效應，建議切換為修護型產品，輔助角質層鎖水。",
+      "• 弱敏肌：嚴禁使用「純水噴霧」降溫，以免加劇「越噴越乾、越噴越紅」的惡性循環。"
+    ]
+  },
+  "紅燈": {
+    title: "🔴 紅燈：極端警報 (Dangerous Impact)",
+    desc: "溫濕度變化突破防禦極限，極易引發乾癢、緊繃刺痛或局部脫屑。",
+    suggestions: [
+      "• 常規產品保濕力已不足以抵禦環境抽水，必須採用高能修護與封閉性保濕手段。",
+      "• 弱敏肌：啟動「減法保養」！全面停用美白、高濃度維他命等功能性產品，避免任何可能引發刺激的成分。"
+    ]
+  }
+};
+
+// ==========================================
 // 錯誤訊息 Flex Message
 // ==========================================
 function getErrorFlexMessage() {
@@ -637,7 +673,7 @@ function getErrorFlexMessage() {
 }
 
 // ==========================================
-// 第一頁：Flex Message（6都預報表格 - 2天）
+// 第一頁：Flex Message（6都預報表格 - 2天 + 動態燈號說明）
 // ==========================================
 async function generatePage1Flex(startOffset = 0) {
   const citiesData = [];
@@ -653,13 +689,14 @@ async function generatePage1Flex(startOffset = 0) {
   }
   
   // ============================================================
-  // ✅ 從 API 的 dataTime 提取日期
+  // ✅ 從 API 的 dataTime 提取日期（移除 +08:00）
   // ============================================================
   let day0Label = "日期1";
   let day1Label = "日期2";
   
   if (globalDataTime) {
-    const parts = globalDataTime.split(' ');
+    const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
+    const parts = cleanTime.split(' ');
     if (parts.length > 0) {
       const dateParts = parts[0].split('-');
       if (dateParts.length === 3) {
@@ -676,7 +713,6 @@ async function generatePage1Flex(startOffset = 0) {
       }
     }
   } else {
-    // ⭐ 備用：使用台灣時間 + startOffset
     const taiwanTime = getTaiwanTime();
     const year = taiwanTime.getUTCFullYear();
     const month = taiwanTime.getUTCMonth() + 1;
@@ -690,7 +726,28 @@ async function generatePage1Flex(startOffset = 0) {
     console.log(`⚠️ 使用備用日期: ${day0Label} ~ ${day1Label}`);
   }
   
-  // 建立表格標題列
+  // ============================================================
+  // ✅ 收集兩天各自出現的燈號種類
+  // ============================================================
+  const day0Lights = new Set();
+  const day1Lights = new Set();
+  const allLightNames = ["綠燈", "黃燈", "橘燈", "紅燈"];
+  
+  for (const cityData of citiesData) {
+    const day0 = cityData.days[0];
+    const day1 = cityData.days[1];
+    
+    if (day0 && day0.light && allLightNames.includes(day0.light.name)) {
+      day0Lights.add(day0.light.name);
+    }
+    if (day1 && day1.light && allLightNames.includes(day1.light.name)) {
+      day1Lights.add(day1.light.name);
+    }
+  }
+  
+  // ============================================================
+  // ✅ 建立表格標題列
+  // ============================================================
   const tableRows = [
     { type: "box", layout: "horizontal", contents: [
       { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2 },
@@ -702,7 +759,9 @@ async function generatePage1Flex(startOffset = 0) {
   
   let hasError = false;
   
-  // 逐城市填入燈號
+  // ============================================================
+  // ✅ 逐城市填入燈號
+  // ============================================================
   for (const cityData of citiesData) {
     const day0 = cityData.days[0];
     const day1 = cityData.days[1];
@@ -725,10 +784,117 @@ async function generatePage1Flex(startOffset = 0) {
     });
   }
   
-  // 資料時間顯示
-  const dataTimeStr = globalDataTime || new Date().toLocaleString();
+  // ============================================================
+  // ✅ 資料時間（移除 +08:00）
+  // ============================================================
+  let dataTimeStr = globalDataTime || new Date().toLocaleString();
+  dataTimeStr = dataTimeStr.replace(/\+08:00/g, '').trim();
   
-  // Footer 內容
+  // ============================================================
+  // ✅ 建立 Body 內容
+  // ============================================================
+  const bodyContents = [...tableRows];
+  
+  // 分隔線
+  bodyContents.push({ type: "separator", margin: "md" });
+  
+  // ============================================================
+  // ✅ 燈號圖例（只顯示當日出現的燈號）
+  // ============================================================
+  const lightEmojis = {
+    "綠燈": "🟢",
+    "黃燈": "🟡",
+    "橘燈": "🟠",
+    "紅燈": "🔴"
+  };
+  const lightColors = {
+    "綠燈": "#00CC00",
+    "黃燈": "#FFD700",
+    "橘燈": "#FF8C00",
+    "紅燈": "#FF0000"
+  };
+  
+  // 第1天的燈號圖例
+  const day0LightList = Array.from(day0Lights).filter(name => allLightNames.includes(name));
+  if (day0LightList.length > 0) {
+    const emojis = day0LightList.map(name => 
+      `${lightEmojis[name]} ${name}`
+    ).join('  ');
+    bodyContents.push({
+      type: "text",
+      text: `📅 ${day0Label} 燈號：${emojis}`,
+      size: "sm",
+      color: "#666666",
+      wrap: true
+    });
+  }
+  
+  // 第2天的燈號圖例
+  const day1LightList = Array.from(day1Lights).filter(name => allLightNames.includes(name));
+  if (day1LightList.length > 0) {
+    const emojis = day1LightList.map(name => 
+      `${lightEmojis[name]} ${name}`
+    ).join('  ');
+    bodyContents.push({
+      type: "text",
+      text: `📅 ${day1Label} 燈號：${emojis}`,
+      size: "sm",
+      color: "#666666",
+      wrap: true
+    });
+  }
+  
+  bodyContents.push({ type: "separator", margin: "md" });
+  
+  // ============================================================
+  // ✅ 動態燈號說明（只顯示當日出現的燈號）
+  // ============================================================
+  const allDayLights = new Set([...day0Lights, ...day1Lights]);
+  const validLights = Array.from(allDayLights).filter(name => allLightNames.includes(name));
+  
+  if (validLights.length > 0) {
+    bodyContents.push({
+      type: "text",
+      text: "📋 燈號說明與建議",
+      weight: "bold",
+      size: "md",
+      margin: "sm"
+    });
+    
+    for (const lightName of validLights) {
+      const info = LIGHT_DESCRIPTIONS[lightName];
+      if (info) {
+        bodyContents.push({
+          type: "text",
+          text: info.title,
+          weight: "bold",
+          size: "sm",
+          color: lightColors[lightName] || "#666666",
+          margin: "sm"
+        });
+        bodyContents.push({
+          type: "text",
+          text: info.desc,
+          size: "sm",
+          color: "#666666",
+          wrap: true
+        });
+        for (const suggestion of info.suggestions) {
+          bodyContents.push({
+            type: "text",
+            text: suggestion,
+            size: "xs",
+            color: "#666666",
+            wrap: true
+          });
+        }
+      }
+    }
+  }
+  
+  // ============================================================
+  // ✅ Footer 內容
+  // ============================================================
   const footerContents = [
     { type: "separator" },
     { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center" },
@@ -748,10 +914,12 @@ async function generatePage1Flex(startOffset = 0) {
   
   footerContents.push(
     { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
-    { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
+    { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看完整燈號說明", text: "詳細說明" }, margin: "md", color: "#667eea" }
   );
   
-  // 回傳 Flex Message
+  // ============================================================
+  // ✅ 回傳 Flex Message
+  // ============================================================
   return {
     type: "flex",
     altText: `🌡️💧 皮膚濕度壓力指數 ${day0Label}~${day1Label}`,
@@ -772,19 +940,7 @@ async function generatePage1Flex(startOffset = 0) {
         type: "box",
         layout: "vertical",
         spacing: "sm",
-        contents: [
-          ...tableRows,
-          { type: "separator", margin: "md" },
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🟢 綠燈", size: "lg", color: "#00CC00", flex: 1, align: "center", weight: "bold" },
-            { type: "text", text: "🟡 黃燈", size: "lg", color: "#FFD700", flex: 1, align: "center", weight: "bold" }
-          ]},
-          { type: "box", layout: "horizontal", contents: [
-            { type: "text", text: "🟠 橘燈", size: "lg", color: "#FF8C00", flex: 1, align: "center", weight: "bold" },
-            { type: "text", text: "🔴 紅燈", size: "lg", color: "#FF0000", flex: 1, align: "center", weight: "bold" }
-          ]},
-          { type: "text", text: "❓ 暫無資料", size: "md", color: "#999999", align: "center", margin: "md" }
-        ],
+        contents: bodyContents,
         paddingAll: "20px"
       },
       footer: {
@@ -1192,7 +1348,6 @@ app.post('/webhook', async (req, res) => {
 let lastPublishDate = null;
 
 function checkAndPublish() {
-  const now = new Date();
   const taiwanTime = getTaiwanTime();
   const hours = taiwanTime.getUTCHours();
   const minutes = taiwanTime.getUTCMinutes();
