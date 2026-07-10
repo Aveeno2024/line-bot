@@ -1,4 +1,3 @@
-
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -142,7 +141,7 @@ const CITIES = [
 ];
 
 // ==========================================
-// SHPI V3 核心計算函數（與 VBA 版本一致）
+// SHPI V3 核心計算函數
 // ==========================================
 
 /**
@@ -175,61 +174,41 @@ function calcDI(e_in) {
 }
 
 /**
- * 燈號判定（與 VBA 版本完全一致）
+ * 燈號判定
  * 🟢 綠燈：Δe < 0.8 且 DI < 44
  * 🟡 黃燈：0.8 ≤ Δe < 1.2 或 44 ≤ DI < 52
  * 🟠 橘燈：1.2 ≤ Δe < 1.6 或 52 ≤ DI < 58
  * 🔴 紅燈：Δe ≥ 1.6 或 DI ≥ 58
  */
 function getLightLevel(delta_e, di) {
-  // 🔴 紅燈：最高優先級
   if (delta_e >= 1.6 || di >= 58) {
     return { level: 4, name: "紅燈", emoji: "🔴", color: "#FF0000", bgColor: "#FF0000", textColor: "#FFFFFF" };
   }
-  // 🟠 橘燈
   if ((delta_e >= 1.2 && delta_e < 1.6) || (di >= 52 && di < 58)) {
     return { level: 3, name: "橘燈", emoji: "🟠", color: "#FF8C00", bgColor: "#FF8C00", textColor: "#FFFFFF" };
   }
-  // 🟡 黃燈
   if ((delta_e >= 0.8 && delta_e < 1.2) || (di >= 44 && di < 52)) {
     return { level: 2, name: "黃燈", emoji: "🟡", color: "#FFD700", bgColor: "#FFD700", textColor: "#333333" };
   }
-  // 🟢 綠燈
   return { level: 1, name: "綠燈", emoji: "🟢", color: "#00CC00", bgColor: "#00CC00", textColor: "#FFFFFF" };
 }
 
 /**
- * 完整 SHPI V3 計算（單日）- 含詳細 LOG
+ * 完整 SHPI V3 計算（單日）
  */
 function calculateSHPI(tempOut, humOut) {
-  // 步驟1：飽和水蒸氣壓
   const e_s = calcSaturationVaporPressure(tempOut);
-  
-  // 步驟2：室外實際水蒸氣壓
   const e_out = e_s * humOut / 100;
-  
-  // 步驟3：室內穩態水蒸氣壓
   const e_in = calcIndoorVaporPressure(tempOut, humOut);
-  
-  // 步驟4：乾燥指數 DI
   const di = calcDI(e_in);
-  
-  // 步驟5：絕對濕度壓力指數 Δe
   const delta_e = e_out - e_in;
-  
-  // 燈號判定
   const light = getLightLevel(delta_e, di);
   
-  // ============================================================
-  // ✅ 詳細 LOG 顯示
-  // ============================================================
   console.log(`\n   📊 ===== SHPI V3 計算結果 =====`);
   console.log(`   🌡️  氣溫: ${Math.round(tempOut)}℃`);
   console.log(`   💧  室外濕度: ${Math.round(humOut)}%`);
-  console.log(`   📐  飽和水蒸氣壓 (e_s): ${Math.round(e_s * 1000) / 1000} kPa`);
   console.log(`   📤  室外水蒸氣壓 (e_out): ${Math.round(e_out * 1000) / 1000} kPa`);
   console.log(`   📥  室內水蒸氣壓 (e_in): ${Math.round(e_in * 1000) / 1000} kPa`);
-  console.log(`   📊  室內相對濕度 (RH_in): ${Math.round(100 * e_in / ES_26)}%`);
   console.log(`   🔥  室內乾燥指數 (DI): ${Math.round(di * 10) / 10}`);
   console.log(`   ⚡  絕對濕度壓力指數 (Δe): ${Math.round(delta_e * 1000) / 1000} kPa`);
   console.log(`   🚦  燈號: ${light.emoji} ${light.name}`);
@@ -251,17 +230,11 @@ function calculateSHPI(tempOut, humOut) {
 // 台灣時間工具函數
 // ==========================================
 
-/**
- * 取得台灣時間的 Date 物件
- */
 function getTaiwanTime() {
   const now = new Date();
   return new Date(now.getTime() + 8 * 60 * 60 * 1000);
 }
 
-/**
- * 取得台灣時間日期字串 (YYYY-MM-DD)
- */
 function getTaiwanDateString(offset = 0) {
   const taiwanTime = getTaiwanTime();
   const year = taiwanTime.getUTCFullYear();
@@ -270,22 +243,16 @@ function getTaiwanDateString(offset = 0) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-/**
- * 取得台灣時間小時
- */
 function getTaiwanHour() {
   return getTaiwanTime().getUTCHours();
 }
 
-/**
- * 取得台灣時間分鐘
- */
 function getTaiwanMinute() {
   return getTaiwanTime().getUTCMinutes();
 }
 
 // ==========================================
-// 中央氣象署 API - 獲取 14:00 的預報資料（含完整結構 LOG）
+// 中央氣象署 API
 // ==========================================
 
 async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
@@ -297,9 +264,6 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     const response = await axios.get(url, { timeout: 15000 });
     const data = response.data;
     
-    // ============================================================
-    // ✅ 完整 API 回應結構檢查 LOG
-    // ============================================================
     console.log(`\n   📦 ===== API 完整回應結構檢查 =====`);
     console.log(`   🔍 success: ${data.success}`);
     console.log(`   🔍 records 存在: ${!!data.records}`);
@@ -371,23 +335,14 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
       return null;
     }
     
-    // ============================================================
-    // ✅ 使用台灣時間計算目標日期 (YYYY-MM-DD)
-    // ============================================================
     const targetDateStr = getTaiwanDateString(dateOffset);
     console.log(`📅 目標日期 (台灣時間): ${targetDateStr}`);
     
-    // ============================================================
-    // ✅ 列出所有可用的時間點（供驗證）
-    // ============================================================
     console.log(`\n   📋 ===== ${city.displayName} 所有可用時間點 (溫度) =====`);
     const allTimes = tempElem.Time.map(t => t.DataTime).join(', ');
     console.log(`   🕐 ${allTimes}`);
     console.log(`   ${'='.repeat(50)}`);
     
-    // ============================================================
-    // ✅ 同時比對日期和時間
-    // ============================================================
     let tempValue = null, humValue = null;
     let actualDataTime = null;
     
@@ -431,7 +386,6 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     }
     
     console.log(`❌ 找不到 ${targetDateStr} ${targetHour}:00 的數據`);
-    console.log(`   💡 提示: 請檢查上方「所有可用時間點」列表，確認該時段是否存在`);
     return null;
   } catch (error) {
     console.error(`❌ ${city.displayName} getForecastAtTime 錯誤: ${error.message}`);
@@ -475,23 +429,18 @@ async function getCurrentWeather(city) {
 }
 
 // ==========================================
-// 獲取天氣資料（支援即時觀測備援 + 多時間點備援 + 錯誤處理）
+// 獲取天氣資料
 // ==========================================
 
 async function getWeather(city, dateOffset = 0, targetHour = 14) {
   try {
-    // 先嘗試從預報 API 抓取
     let weather = await getForecastAtTime(city, dateOffset, targetHour);
     
-    // ✅ 如果預報 API 失敗，且 dateOffset === 0（今天），改用即時觀測
     if (!weather && dateOffset === 0) {
-      console.log(`⚠️ 預報API失敗 (今天 14:00 已過或無資料)，嘗試使用即時觀測API`);
+      console.log(`⚠️ 預報API失敗，嘗試使用即時觀測API`);
       weather = await getCurrentWeather(city);
     }
     
-    // ============================================================
-    // ✅ 如果 dateOffset > 0 且失敗，嘗試其他時間點
-    // ============================================================
     if (!weather && dateOffset > 0) {
       const fallbackHours = [12, 18, 20, 8];
       console.log(`⚠️ ${city.displayName} dateOffset=${dateOffset} 的 ${targetHour}:00 無資料`);
@@ -522,7 +471,7 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
 }
 
 // ==========================================
-// 計算起始偏移量（根據台灣時間）
+// 計算起始偏移量
 // ==========================================
 
 function calculateStartOffset() {
@@ -533,13 +482,13 @@ function calculateStartOffset() {
     console.log(`⏰ 台灣時間 ${hours}:${minutes}，已過 18:00，從 +1 天（明天）開始抓取預報`);
     return 1;
   } else {
-    console.log(`⏰ 台灣時間 ${hours}:${minutes}，尚未過 18:00，從 +0 天（今天）開始抓取（必要時改用即時觀測）`);
+    console.log(`⏰ 台灣時間 ${hours}:${minutes}，尚未過 18:00，從 +0 天（今天）開始抓取`);
     return 0;
   }
 }
 
 // ==========================================
-// 計算城市 2 天預報（支援起始偏移 + 詳細狀態 LOG + 錯誤處理）
+// 計算城市 2 天預報
 // ==========================================
 
 async function calculateCityTwoDays(city, startOffset = 0, targetHour = 14) {
@@ -551,37 +500,25 @@ async function calculateCityTwoDays(city, startOffset = 0, targetHour = 14) {
     const weather0 = await getWeather(city, startOffset, targetHour);
     const weather1 = await getWeather(city, startOffset + 1, targetHour);
     
-    // ============================================================
-    // ✅ 詳細 LOG：確認 weather0 和 weather1 的狀態
-    // ============================================================
     console.log(`\n   🔍 ${city.displayName} weather0: ${weather0 ? '✅ 有資料' : '❌ 無資料'}`);
     if (weather0) {
       console.log(`      🌡️  溫度: ${weather0.temp}℃, 💧 濕度: ${weather0.humidity}%`);
       console.log(`      📅  資料時間: ${weather0.dataTime}`);
-    } else {
-      console.log(`      ⚠️  weather0 為 null，跳過計算`);
     }
-    
     console.log(`   🔍 ${city.displayName} weather1: ${weather1 ? '✅ 有資料' : '❌ 無資料'}`);
     if (weather1) {
       console.log(`      🌡️  溫度: ${weather1.temp}℃, 💧 濕度: ${weather1.humidity}%`);
       console.log(`      📅  資料時間: ${weather1.dataTime}`);
-    } else {
-      console.log(`      ⚠️  weather1 為 null，跳過計算`);
     }
     
     const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity) : null;
     const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity) : null;
     
-    // ============================================================
-    // ✅ 計算完成的確認 LOG
-    // ============================================================
     console.log(`\n   ✅ ${city.displayName} 兩天計算完成:`);
     console.log(`      📅 第1天: ${day0 ? day0.light.emoji + ' ' + day0.light.name : '❓ 無資料'}`);
     console.log(`      📅 第2天: ${day1 ? day1.light.emoji + ' ' + day1.light.name : '❓ 無資料'}`);
     
     let dataTime = weather0?.dataTime || weather1?.dataTime || null;
-    
     console.log(`${'='.repeat(60)}\n`);
     
     return {
@@ -591,16 +528,11 @@ async function calculateCityTwoDays(city, startOffset = 0, targetHour = 14) {
     };
     
   } catch (error) {
-    // ============================================================
-    // ✅ 錯誤處理：記錄錯誤並回傳空結果，不中斷流程
-    // ============================================================
     console.error(`\n❌❌❌ ${city.displayName} 計算過程中發生錯誤 ❌❌❌`);
-    console.error(`   錯誤類型: ${error.name || 'UnknownError'}`);
     console.error(`   錯誤訊息: ${error.message}`);
     console.error(`   錯誤堆疊: ${error.stack || '無堆疊資訊'}`);
     console.log(`${'='.repeat(60)}\n`);
     
-    // 回傳空的結果，避免中斷整個流程
     return {
       city: city.displayName,
       days: [null, null],
@@ -704,7 +636,7 @@ function getErrorFlexMessage() {
 }
 
 // ==========================================
-// 第一頁：Flex Message（6都預報表格 - 2天）
+// 第一頁：Flex Message（6都預報表格 + 燈號說明 - 單頁整合版）
 // ==========================================
 async function generatePage1Flex(startOffset = 0) {
   const citiesData = [];
@@ -720,7 +652,6 @@ async function generatePage1Flex(startOffset = 0) {
       globalDataTime = twoDays.dataTime;
     }
     
-    // 收集第一天出現的燈號
     const day0 = twoDays.days[0];
     if (day0 && day0.light && allLightNames.includes(day0.light.name)) {
       day0Lights.add(day0.light.name);
@@ -768,7 +699,7 @@ async function generatePage1Flex(startOffset = 0) {
   // ============================================================
   // ✅ 建立表格標題列
   // ============================================================
-  const tableRows = [
+  const bodyContents = [
     { type: "box", layout: "horizontal", contents: [
       { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2 },
       { type: "text", text: day0Label, weight: "bold", size: "lg", flex: 1, align: "center" },
@@ -795,7 +726,7 @@ async function generatePage1Flex(startOffset = 0) {
     const color0 = day0 ? day0.light.color : "#999999";
     const color1 = day1 ? day1.light.color : "#999999";
     
-    tableRows.push({
+    bodyContents.push({
       type: "box", layout: "horizontal", contents: [
         { type: "text", text: cityData.city, size: "lg", flex: 2 },
         { type: "text", text: emoji0, size: "xl", flex: 1, align: "center", color: color0 },
@@ -805,25 +736,78 @@ async function generatePage1Flex(startOffset = 0) {
   }
   
   // ============================================================
+  // ✅ 燈號說明（只顯示第一天出現的燈號）- 不顯示圖例
+  // ============================================================
+  const validLights = Array.from(day0Lights).filter(name => allLightNames.includes(name));
+  
+  if (validLights.length > 0) {
+    bodyContents.push({ type: "separator", margin: "md" });
+    bodyContents.push({
+      type: "text",
+      text: "📋 燈號說明與建議",
+      weight: "bold",
+      size: "md",
+      margin: "sm"
+    });
+    
+    const lightColors = {
+      "綠燈": "#00CC00",
+      "黃燈": "#FFD700",
+      "橘燈": "#FF8C00",
+      "紅燈": "#FF0000"
+    };
+    
+    for (const lightName of validLights) {
+      const info = LIGHT_DESCRIPTIONS[lightName];
+      if (info) {
+        bodyContents.push({
+          type: "text",
+          text: info.title,
+          weight: "bold",
+          size: "sm",
+          color: lightColors[lightName] || "#666666",
+          margin: "sm"
+        });
+        bodyContents.push({
+          type: "text",
+          text: info.desc,
+          size: "sm",
+          color: "#666666",
+          wrap: true
+        });
+        for (const suggestion of info.suggestions) {
+          bodyContents.push({
+            type: "text",
+            text: suggestion,
+            size: "xs",
+            color: "#666666",
+            wrap: true
+          });
+        }
+        if (lightName !== validLights[validLights.length - 1]) {
+          bodyContents.push({ type: "separator", margin: "sm" });
+        }
+      }
+    }
+  }
+  
+  // ============================================================
   // ✅ 資料時間（移除 +08:00）
   // ============================================================
   let dataTimeStr = globalDataTime || new Date().toLocaleString();
   dataTimeStr = dataTimeStr.replace(/\+08:00/g, '').trim();
   
   // ============================================================
-  // ✅ 建立 Body 內容（只放表格，不放燈號說明）
-  // ============================================================
-  const bodyContents = [...tableRows];
-  
-  // ============================================================
-  // ✅ Footer 內容
+  // ✅ Footer 內容（加入查詢指令與訂閱管理）
   // ============================================================
   const footerContents = [
     { type: "separator" },
     { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center" },
     { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "md", color: "#999999", align: "center" },
     { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
-    { type: "button", style: "primary", height: "sm", action: { type: "message", label: "📋 查看燈號說明及建議", text: "詳細說明" }, margin: "md", color: "#667eea" }
+    { type: "separator", margin: "sm" },
+    { type: "text", text: "🔍 輸入「全台」查詢｜「詳細說明」看完整介紹", size: "xs", color: "#999999", align: "center", wrap: true },
+    { type: "text", text: "🔔 輸入「加入訂閱」開啟｜「取消訂閱」關閉每日提醒", size: "xs", color: "#999999", align: "center", wrap: true }
   ];
   
   if (hasError) {
@@ -838,7 +822,7 @@ async function generatePage1Flex(startOffset = 0) {
   }
   
   // ============================================================
-  // ✅ 回傳 Flex Message（包含 day0Lights 供第二頁使用）
+  // ✅ 回傳 Flex Message
   // ============================================================
   return {
     page1: {
@@ -878,17 +862,51 @@ async function generatePage1Flex(startOffset = 0) {
 }
 
 // ==========================================
-// 第二頁：燈號說明與保健建議（以 DOCX 內容為準，保留查詢指令與訂閱管理）
+// 快取管理函數
+// ==========================================
+
+async function precomputeAndCache() {
+  const startOffset = calculateStartOffset();
+  
+  console.log(`\n🔄 開始預計算快取 - ${getTaiwanTime().toLocaleString()}`);
+  console.log(`📅 從 +${startOffset} 天開始抓取`);
+  const startTime = Date.now();
+  
+  try {
+    const page1Result = await generatePage1Flex(startOffset);
+    const page1 = page1Result.page1;
+    const day0Lights = page1Result.day0Lights || new Set();
+    
+    // 產生第二頁（保留作為備用，但主流程使用第一頁）
+    const page2 = await generatePage2Flex(day0Lights);
+    
+    cachedForecast = { page1, page2 };
+    lastCacheTime = new Date();
+    
+    const cacheData = {
+      page1: page1,
+      page2: page2,
+      lastCacheTime: lastCacheTime.toISOString(),
+      startOffset: startOffset
+    };
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ 快取預計算完成，耗時 ${duration}ms`);
+  } catch (error) {
+    console.error('❌ 預計算失敗:', error);
+    cachedForecast = null;
+  }
+}
+
+// ==========================================
+// 第二頁（備用，保留完整說明）
 // ==========================================
 async function generatePage2Flex(day0Lights = new Set()) {
-  // 只顯示第一天出現的燈號
   const validLights = Array.from(day0Lights).filter(name => ["綠燈", "黃燈", "橘燈", "紅燈"].includes(name));
-  
-  // 建立 body 內容
   const bodyContents = [];
   
   if (validLights.length === 0) {
-    // 若無燈號資料，顯示提示
     bodyContents.push({
       type: "text",
       text: "📋 今日尚無燈號資料，請稍後再查詢。",
@@ -897,7 +915,6 @@ async function generatePage2Flex(day0Lights = new Set()) {
       wrap: true
     });
   } else {
-    // 依序顯示每個燈號的說明
     for (const lightName of validLights) {
       const info = LIGHT_DESCRIPTIONS[lightName];
       if (info) {
@@ -930,7 +947,6 @@ async function generatePage2Flex(day0Lights = new Set()) {
             wrap: true
           });
         }
-        // 燈號之間加分隔線（最後一個不加）
         if (lightName !== validLights[validLights.length - 1]) {
           bodyContents.push({ type: "separator", margin: "md" });
         }
@@ -938,59 +954,14 @@ async function generatePage2Flex(day0Lights = new Set()) {
     }
   }
   
-  // ============================================================
-  // ✅ 加入分隔線
-  // ============================================================
   bodyContents.push({ type: "separator", margin: "md" });
-  
-  // ============================================================
-  // ✅ 保留：查詢指令
-  // ============================================================
-  bodyContents.push({
-    type: "text",
-    text: "🔍 查詢指令",
-    weight: "bold",
-    size: "md"
-  });
-  bodyContents.push({
-    type: "text",
-    text: "• 輸入「全台」查看六都2天預報",
-    size: "sm",
-    color: "#666666",
-    wrap: true
-  });
-  bodyContents.push({
-    type: "text",
-    text: "• 輸入「詳細說明」查看本頁面",
-    size: "sm",
-    color: "#666666",
-    wrap: true
-  });
-  
-  // ============================================================
-  // ✅ 保留：訂閱管理
-  // ============================================================
+  bodyContents.push({ type: "text", text: "🔍 查詢指令", weight: "bold", size: "md" });
+  bodyContents.push({ type: "text", text: "• 輸入「全台」查看六都2天預報", size: "sm", color: "#666666", wrap: true });
+  bodyContents.push({ type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "sm", color: "#666666", wrap: true });
   bodyContents.push({ type: "separator", margin: "md" });
-  bodyContents.push({
-    type: "text",
-    text: "🔔 訂閱管理",
-    weight: "bold",
-    size: "md"
-  });
-  bodyContents.push({
-    type: "text",
-    text: "• 輸入「加入訂閱」開啟每日提醒",
-    size: "sm",
-    color: "#666666",
-    wrap: true
-  });
-  bodyContents.push({
-    type: "text",
-    text: "• 輸入「取消訂閱」關閉每日提醒",
-    size: "sm",
-    color: "#666666",
-    wrap: true
-  });
+  bodyContents.push({ type: "text", text: "🔔 訂閱管理", weight: "bold", size: "md" });
+  bodyContents.push({ type: "text", text: "• 輸入「加入訂閱」開啟每日提醒", size: "sm", color: "#666666", wrap: true });
+  bodyContents.push({ type: "text", text: "• 輸入「取消訂閱」關閉每日提醒", size: "sm", color: "#666666", wrap: true });
   
   return {
     type: "flex",
@@ -1026,46 +997,6 @@ async function generatePage2Flex(day0Lights = new Set()) {
       }
     }
   };
-}
-
-// ==========================================
-// 快取管理函數（動態 startOffset）
-// ==========================================
-
-async function precomputeAndCache() {
-  // ✅ 根據台灣時間動態計算起始偏移量
-  const startOffset = calculateStartOffset();
-  
-  console.log(`\n🔄 開始預計算快取 - ${getTaiwanTime().toLocaleString()}`);
-  console.log(`📅 從 +${startOffset} 天開始抓取`);
-  const startTime = Date.now();
-  
-  try {
-    // ✅ 先產生第一頁，取得 day0Lights
-    const page1Result = await generatePage1Flex(startOffset);
-    const page1 = page1Result.page1;
-    const day0Lights = page1Result.day0Lights || new Set();
-    
-    // ✅ 產生第二頁，傳入 day0Lights
-    const page2 = await generatePage2Flex(day0Lights);
-    
-    cachedForecast = { page1, page2 };
-    lastCacheTime = new Date();
-    
-    const cacheData = {
-      page1: page1,
-      page2: page2,
-      lastCacheTime: lastCacheTime.toISOString(),
-      startOffset: startOffset
-    };
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
-    
-    const duration = Date.now() - startTime;
-    console.log(`✅ 快取預計算完成，耗時 ${duration}ms`);
-  } catch (error) {
-    console.error('❌ 預計算失敗:', error);
-    cachedForecast = null;
-  }
 }
 
 function loadCacheFromFile() {
@@ -1296,14 +1227,17 @@ app.post('/webhook', async (req, res) => {
         }
         
         if (input === '詳細說明') {
-          // ✅ 從快取中取得 day0Lights（或重新計算）
           const cache = await getCachedForecast();
-          // 重新計算 day0Lights
-          const startOffset = calculateStartOffset();
-          const page1Result = await generatePage1Flex(startOffset);
-          const day0Lights = page1Result.day0Lights || new Set();
-          const page2 = await generatePage2Flex(day0Lights);
-          await replyFlexMessage(replyToken, page2);
+          if (cache && cache.page2) {
+            await replyFlexMessage(replyToken, cache.page2);
+          } else {
+            // 若無快取，重新計算
+            const startOffset = calculateStartOffset();
+            const page1Result = await generatePage1Flex(startOffset);
+            const day0Lights = page1Result.day0Lights || new Set();
+            const page2 = await generatePage2Flex(day0Lights);
+            await replyFlexMessage(replyToken, page2);
+          }
           continue;
         }
         
@@ -1388,7 +1322,6 @@ console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7
 // ⭐ 定時預計算任務（僅 18:00 主要）
 // ==========================================
 
-// 18:00 預計算（主要 - 確保氣象署 17:00 發布的資料已完整釋出）
 cron.schedule('0 18 * * *', () => {
   console.log(`\n⏰ [18:00] 主要預計算 - 使用 17:00 發布的最新資料`);
   precomputeAndCache();
