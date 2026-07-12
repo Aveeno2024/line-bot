@@ -1,3 +1,4 @@
+
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -429,18 +430,38 @@ async function getCurrentWeather(city) {
 }
 
 // ==========================================
-// 獲取天氣資料
+// 獲取天氣資料（動態判斷：≥14:00 用即時觀測，<14:00 用預報）
 // ==========================================
 
 async function getWeather(city, dateOffset = 0, targetHour = 14) {
   try {
-    let weather = await getForecastAtTime(city, dateOffset, targetHour);
+    const now = getTaiwanTime();
+    const currentHour = now.getUTCHours();
+    const currentMinute = now.getUTCMinutes();
+    const currentTime = currentHour + currentMinute / 60;
     
-    if (!weather && dateOffset === 0) {
-      console.log(`⚠️ 預報API失敗，嘗試使用即時觀測API`);
+    // ============================================================
+    // ✅ 動態判斷資料來源
+    // 如果現在時間 ≥ 14:00，今天的 14:00 已過，使用即時觀測
+    // 如果現在時間 < 14:00，使用預報 API
+    // ============================================================
+    const useRealtime = (currentTime >= 14.0 && dateOffset === 0);
+    
+    let weather = null;
+    
+    if (useRealtime) {
+      // ✅ 已超過 14:00，使用即時觀測
+      console.log(`⏰ 台灣時間 ${String(currentHour).padStart(2,'0')}:${String(currentMinute).padStart(2,'0')}，已過 14:00，使用即時觀測資料`);
       weather = await getCurrentWeather(city);
+    } else {
+      // ✅ 尚未超過 14:00，使用預報 API
+      console.log(`⏰ 台灣時間 ${String(currentHour).padStart(2,'0')}:${String(currentMinute).padStart(2,'0')}，尚未過 14:00，使用預報 API`);
+      weather = await getForecastAtTime(city, dateOffset, targetHour);
     }
     
+    // ============================================================
+    // ✅ 如果 dateOffset > 0 且預報失敗，嘗試其他時間點
+    // ============================================================
     if (!weather && dateOffset > 0) {
       const fallbackHours = [12, 18, 20, 8];
       console.log(`⚠️ ${city.displayName} dateOffset=${dateOffset} 的 ${targetHour}:00 無資料`);
@@ -457,6 +478,14 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
       }
     }
     
+    // ============================================================
+    // ✅ 如果仍然失敗，嘗試預報 API（最後手段）
+    // ============================================================
+    if (!weather && dateOffset === 0) {
+      console.log(`⚠️ 即時觀測失敗，嘗試使用預報 API 作為備援`);
+      weather = await getForecastAtTime(city, dateOffset, targetHour);
+    }
+    
     if (!weather) {
       console.log(`❌ ${city.displayName} 所有 API 都失敗，標記為暫無資料`);
       return null;
@@ -471,14 +500,16 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
 }
 
 // ==========================================
-// 計算起始偏移量
+// 計算起始偏移量（根據台灣時間）
 // ==========================================
 
 function calculateStartOffset() {
   const hours = getTaiwanHour();
   const minutes = getTaiwanMinute();
+  const currentTime = hours + minutes / 60;
   
-  if (hours >= 18) {
+  // ✅ 06:30 執行時，抓取當天 14:00（startOffset = 0）
+  if (currentTime >= 18.0) {
     console.log(`⏰ 台灣時間 ${hours}:${minutes}，已過 18:00，從 +1 天（明天）開始抓取預報`);
     return 1;
   } else {
@@ -736,7 +767,7 @@ async function generatePage1Flex(startOffset = 0) {
   }
   
   // ============================================================
-  // ✅ 燈號說明（只顯示第一天出現的燈號）- 不顯示圖例
+  // ✅ 燈號說明（只顯示第一天出現的燈號）
   // ============================================================
   const validLights = Array.from(day0Lights).filter(name => allLightNames.includes(name));
   
@@ -862,44 +893,6 @@ async function generatePage1Flex(startOffset = 0) {
 }
 
 // ==========================================
-// 快取管理函數
-// ==========================================
-
-async function precomputeAndCache() {
-  const startOffset = calculateStartOffset();
-  
-  console.log(`\n🔄 開始預計算快取 - ${getTaiwanTime().toLocaleString()}`);
-  console.log(`📅 從 +${startOffset} 天開始抓取`);
-  const startTime = Date.now();
-  
-  try {
-    const page1Result = await generatePage1Flex(startOffset);
-    const page1 = page1Result.page1;
-    const day0Lights = page1Result.day0Lights || new Set();
-    
-    // 產生第二頁（保留作為備用，但主流程使用第一頁）
-    const page2 = await generatePage2Flex(day0Lights);
-    
-    cachedForecast = { page1, page2 };
-    lastCacheTime = new Date();
-    
-    const cacheData = {
-      page1: page1,
-      page2: page2,
-      lastCacheTime: lastCacheTime.toISOString(),
-      startOffset: startOffset
-    };
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
-    
-    const duration = Date.now() - startTime;
-    console.log(`✅ 快取預計算完成，耗時 ${duration}ms`);
-  } catch (error) {
-    console.error('❌ 預計算失敗:', error);
-    cachedForecast = null;
-  }
-}
-
-// ==========================================
 // 第二頁（備用，保留完整說明）
 // ==========================================
 async function generatePage2Flex(day0Lights = new Set()) {
@@ -997,6 +990,43 @@ async function generatePage2Flex(day0Lights = new Set()) {
       }
     }
   };
+}
+
+// ==========================================
+// 快取管理函數
+// ==========================================
+
+async function precomputeAndCache() {
+  const startOffset = calculateStartOffset();
+  
+  console.log(`\n🔄 開始預計算快取 - ${getTaiwanTime().toLocaleString()}`);
+  console.log(`📅 從 +${startOffset} 天開始抓取`);
+  const startTime = Date.now();
+  
+  try {
+    const page1Result = await generatePage1Flex(startOffset);
+    const page1 = page1Result.page1;
+    const day0Lights = page1Result.day0Lights || new Set();
+    
+    const page2 = await generatePage2Flex(day0Lights);
+    
+    cachedForecast = { page1, page2 };
+    lastCacheTime = new Date();
+    
+    const cacheData = {
+      page1: page1,
+      page2: page2,
+      lastCacheTime: lastCacheTime.toISOString(),
+      startOffset: startOffset
+    };
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ 快取預計算完成，耗時 ${duration}ms`);
+  } catch (error) {
+    console.error('❌ 預計算失敗:', error);
+    cachedForecast = null;
+  }
 }
 
 function loadCacheFromFile() {
@@ -1231,7 +1261,6 @@ app.post('/webhook', async (req, res) => {
           if (cache && cache.page2) {
             await replyFlexMessage(replyToken, cache.page2);
           } else {
-            // 若無快取，重新計算
             const startOffset = calculateStartOffset();
             const page1Result = await generatePage1Flex(startOffset);
             const day0Lights = page1Result.day0Lights || new Set();
@@ -1319,18 +1348,19 @@ setInterval(() => {
 console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
 
 // ==========================================
-// ⭐ 定時預計算任務（僅 18:00 主要）
+// ⭐ 定時預計算任務（僅 06:30 主要）
 // ==========================================
 
-cron.schedule('0 18 * * *', () => {
-  console.log(`\n⏰ [18:00] 主要預計算 - 使用 17:00 發布的最新資料`);
+// 06:30 預計算 - 抓取當天 14:00 預報，確保 7:00 推播使用最新資料
+cron.schedule('30 6 * * *', () => {
+  console.log(`\n⏰ [06:30] 預計算 - 抓取當天 14:00 預報，確保 7:00 推播使用最新資料`);
   precomputeAndCache();
 }, {
   timezone: "Asia/Taipei"
 });
 
-console.log('📅 已設定定時預計算任務：每天 18:00 (台灣時間)');
-console.log('📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始抓取');
+console.log('📅 已設定定時預計算任務：每天 06:30 (台灣時間)');
+console.log('📌 06:30 抓取當天 14:00 預報，確保 7:00 推播使用最新資料');
 
 // ==========================================
 // 啟動伺服器
@@ -1353,7 +1383,7 @@ console.log('📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
     console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
-    console.log(`⏰ 預計算時間：每天 18:00 (台灣時間)`);
+    console.log(`⏰ 預計算時間：每天 06:30 (台灣時間)`);
     console.log(`📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始抓取`);
     console.log(`🕐 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
     console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
