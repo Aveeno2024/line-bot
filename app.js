@@ -142,7 +142,7 @@ const CITIES = [
 ];
 
 // ==========================================
-// SHPI V3 核心計算函數
+// SHPI V4 核心計算函數
 // ==========================================
 
 /**
@@ -175,44 +175,97 @@ function calcDI(e_in) {
 }
 
 /**
- * 燈號判定
- * 🟢 綠燈：Δe < 0.8 且 DI < 44
- * 🟡 黃燈：0.8 ≤ Δe < 1.2 或 44 ≤ DI < 52
- * 🟠 橘燈：1.2 ≤ Δe < 1.6 或 52 ≤ DI < 58
- * 🔴 紅燈：Δe ≥ 1.6 或 DI ≥ 58
+ * 燈號判定（SHPI V4 版）
+ * 🟢 綠燈：Δe < 0.9 且 40 ≤ DI ≤ 50
+ * 🟡 黃燈：0.9 ≤ Δe < 1.25 或 35 ≤ DI ≤ 39 或 51 ≤ DI ≤ 55
+ * 🟠 橘燈：1.25 ≤ Δe < 1.7 或 30 ≤ DI ≤ 34 或 56 ≤ DI ≤ 60
+ * 🔴 紅燈：Δe ≥ 1.7 或 DI < 30 或 DI > 60
  */
 function getLightLevel(delta_e, di) {
-  if (delta_e >= 1.6 || di >= 58) {
-    return { level: 4, name: "紅燈", emoji: "🔴", color: "#FF0000", bgColor: "#FF0000", textColor: "#FFFFFF" };
+  // 🔴 紅燈：最高優先級
+  if (delta_e >= 1.7 || di < 30 || di > 60) {
+    return { 
+      level: 4, 
+      name: "紅燈", 
+      emoji: "🔴", 
+      color: "#FF0000", 
+      bgColor: "#FF0000", 
+      textColor: "#FFFFFF"
+    };
   }
-  if ((delta_e >= 1.2 && delta_e < 1.6) || (di >= 52 && di < 58)) {
-    return { level: 3, name: "橘燈", emoji: "🟠", color: "#FF8C00", bgColor: "#FF8C00", textColor: "#FFFFFF" };
+  // 🟠 橘燈
+  if ((delta_e >= 1.25 && delta_e < 1.7) || (di >= 30 && di <= 34) || (di >= 56 && di <= 60)) {
+    return { 
+      level: 3, 
+      name: "橘燈", 
+      emoji: "🟠", 
+      color: "#FF8C00", 
+      bgColor: "#FF8C00", 
+      textColor: "#FFFFFF"
+    };
   }
-  if ((delta_e >= 0.8 && delta_e < 1.2) || (di >= 44 && di < 52)) {
-    return { level: 2, name: "黃燈", emoji: "🟡", color: "#FFD700", bgColor: "#FFD700", textColor: "#333333" };
+  // 🟡 黃燈
+  if ((delta_e >= 0.9 && delta_e < 1.25) || (di >= 35 && di <= 39) || (di >= 51 && di <= 55)) {
+    return { 
+      level: 2, 
+      name: "黃燈", 
+      emoji: "🟡", 
+      color: "#FFD700", 
+      bgColor: "#FFD700", 
+      textColor: "#333333"
+    };
   }
-  return { level: 1, name: "綠燈", emoji: "🟢", color: "#00CC00", bgColor: "#00CC00", textColor: "#FFFFFF" };
+  // 🟢 綠燈
+  return { 
+    level: 1, 
+    name: "綠燈", 
+    emoji: "🟢", 
+    color: "#00CC00", 
+    bgColor: "#00CC00", 
+    textColor: "#FFFFFF"
+  };
 }
 
 /**
- * 完整 SHPI V3 計算（單日）
+ * 完整 SHPI V4 計算（單日）- 含詳細 LOG
  */
 function calculateSHPI(tempOut, humOut) {
+  // 步驟1：飽和水蒸氣壓
   const e_s = calcSaturationVaporPressure(tempOut);
+  
+  // 步驟2：室外實際水蒸氣壓
   const e_out = e_s * humOut / 100;
+  
+  // 步驟3：室內穩態水蒸氣壓
   const e_in = calcIndoorVaporPressure(tempOut, humOut);
+  
+  // 步驟4：乾燥指數 DI
   const di = calcDI(e_in);
+  
+  // 步驟5：絕對濕度壓力指數 Δe
   const delta_e = e_out - e_in;
+  
+  // 燈號判定 (V4)
   const light = getLightLevel(delta_e, di);
   
-  console.log(`\n   📊 ===== SHPI V3 計算結果 =====`);
+  // ============================================================
+  // ✅ 詳細 LOG 顯示（含 Δe 和 DI 數值）
+  // ============================================================
+  console.log(`\n   📊 ===== SHPI V4 計算結果 =====`);
   console.log(`   🌡️  氣溫: ${Math.round(tempOut)}℃`);
   console.log(`   💧  室外濕度: ${Math.round(humOut)}%`);
+  console.log(`   📐  飽和水蒸氣壓 (e_s): ${Math.round(e_s * 1000) / 1000} kPa`);
   console.log(`   📤  室外水蒸氣壓 (e_out): ${Math.round(e_out * 1000) / 1000} kPa`);
   console.log(`   📥  室內水蒸氣壓 (e_in): ${Math.round(e_in * 1000) / 1000} kPa`);
+  console.log(`   📊  室內相對濕度 (RH_in): ${Math.round(100 * e_in / ES_26)}%`);
   console.log(`   🔥  室內乾燥指數 (DI): ${Math.round(di * 10) / 10}`);
   console.log(`   ⚡  絕對濕度壓力指數 (Δe): ${Math.round(delta_e * 1000) / 1000} kPa`);
   console.log(`   🚦  燈號: ${light.emoji} ${light.name}`);
+  console.log(`   📋  判斷標準:`);
+  console.log(`       🟢 綠燈: Δe<0.9 且 40≤DI≤50`);
+  console.log(`       🟡 黃燈: 0.9≤Δe<1.25 或 35≤DI≤39 或 51≤DI≤55`);
+  console.log(`       🟠 橘燈: 1.25≤Δe<1.7 或 30≤DI≤34 或 56≤DI≤60`);
+  console.log(`       🔴 紅燈: Δe≥1.7 或 DI<30 或 DI>60`);
   console.log(`   ${'='.repeat(40)}`);
   
   return {
@@ -440,28 +493,18 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
     const currentMinute = now.getUTCMinutes();
     const currentTime = currentHour + currentMinute / 60;
     
-    // ============================================================
-    // ✅ 動態判斷資料來源
-    // 如果現在時間 ≥ 14:00，今天的 14:00 已過，使用即時觀測
-    // 如果現在時間 < 14:00，使用預報 API
-    // ============================================================
     const useRealtime = (currentTime >= 14.0 && dateOffset === 0);
     
     let weather = null;
     
     if (useRealtime) {
-      // ✅ 已超過 14:00，使用即時觀測
       console.log(`⏰ 台灣時間 ${String(currentHour).padStart(2,'0')}:${String(currentMinute).padStart(2,'0')}，已過 14:00，使用即時觀測資料`);
       weather = await getCurrentWeather(city);
     } else {
-      // ✅ 尚未超過 14:00，使用預報 API
       console.log(`⏰ 台灣時間 ${String(currentHour).padStart(2,'0')}:${String(currentMinute).padStart(2,'0')}，尚未過 14:00，使用預報 API`);
       weather = await getForecastAtTime(city, dateOffset, targetHour);
     }
     
-    // ============================================================
-    // ✅ 如果 dateOffset > 0 且預報失敗，嘗試其他時間點
-    // ============================================================
     if (!weather && dateOffset > 0) {
       const fallbackHours = [12, 18, 20, 8];
       console.log(`⚠️ ${city.displayName} dateOffset=${dateOffset} 的 ${targetHour}:00 無資料`);
@@ -478,9 +521,6 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
       }
     }
     
-    // ============================================================
-    // ✅ 如果仍然失敗，嘗試預報 API（最後手段）
-    // ============================================================
     if (!weather && dateOffset === 0) {
       console.log(`⚠️ 即時觀測失敗，嘗試使用預報 API 作為備援`);
       weather = await getForecastAtTime(city, dateOffset, targetHour);
@@ -508,7 +548,6 @@ function calculateStartOffset() {
   const minutes = getTaiwanMinute();
   const currentTime = hours + minutes / 60;
   
-  // ✅ 06:30 執行時，抓取當天 14:00（startOffset = 0）
   if (currentTime >= 18.0) {
     console.log(`⏰ 台灣時間 ${hours}:${minutes}，已過 18:00，從 +1 天（明天）開始抓取預報`);
     return 1;
@@ -667,7 +706,7 @@ function getErrorFlexMessage() {
 }
 
 // ==========================================
-// 第一頁：Flex Message（6都預報表格 + 燈號說明 - 單頁整合版）
+// 第一頁：Flex Message（6都預報表格 - 單頁版）
 // ==========================================
 async function generatePage1Flex(startOffset = 0) {
   const citiesData = [];
@@ -728,7 +767,7 @@ async function generatePage1Flex(startOffset = 0) {
   }
   
   // ============================================================
-  // ✅ 建立表格標題列
+  // ✅ 建立表格標題列（不顯示數值，只顯示燈號）
   // ============================================================
   const bodyContents = [
     { type: "box", layout: "horizontal", contents: [
@@ -742,7 +781,7 @@ async function generatePage1Flex(startOffset = 0) {
   let hasError = false;
   
   // ============================================================
-  // ✅ 逐城市填入燈號
+  // ✅ 逐城市填入燈號（只顯示燈號，不顯示數值）
   // ============================================================
   for (const cityData of citiesData) {
     const day0 = cityData.days[0];
@@ -829,13 +868,14 @@ async function generatePage1Flex(startOffset = 0) {
   dataTimeStr = dataTimeStr.replace(/\+08:00/g, '').trim();
   
   // ============================================================
-  // ✅ Footer 內容（加入查詢指令與訂閱管理）
+  // ✅ Footer 內容
   // ============================================================
   const footerContents = [
     { type: "separator" },
     { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center" },
     { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "md", color: "#999999", align: "center" },
     { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
+    { type: "text", text: "📋 SHPI V4：Δe (蒸氣壓差) + DI (乾燥指數)", size: "xs", color: "#999999", align: "center" },
     { type: "separator", margin: "sm" },
     { type: "text", text: "🔍 輸入「全台」查詢｜「詳細說明」看完整介紹", size: "xs", color: "#999999", align: "center", wrap: true },
     { type: "text", text: "🔔 輸入「加入訂閱」開啟｜「取消訂閱」關閉每日提醒", size: "xs", color: "#999999", align: "center", wrap: true }
