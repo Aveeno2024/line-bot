@@ -227,7 +227,7 @@ function getLightLevel(delta_e, di) {
 }
 
 /**
- * 完整 SHPI V4 計算（單日）- 含詳細 LOG
+ * 完整 SHPI V4 計算（單日）- 含詳細 LOG 及觸發條件
  */
 function calculateSHPI(tempOut, humOut) {
   // 步驟1：飽和水蒸氣壓
@@ -249,7 +249,7 @@ function calculateSHPI(tempOut, humOut) {
   const light = getLightLevel(delta_e, di);
   
   // ============================================================
-  // ✅ 詳細 LOG 顯示（含 Δe 和 DI 數值）
+  // ✅ 詳細 LOG 顯示（含觸發條件分析）
   // ============================================================
   console.log(`\n   📊 ===== SHPI V4 計算結果 =====`);
   console.log(`   🌡️  氣溫: ${Math.round(tempOut)}℃`);
@@ -261,11 +261,78 @@ function calculateSHPI(tempOut, humOut) {
   console.log(`   🔥  室內乾燥指數 (DI): ${Math.round(di * 10) / 10}`);
   console.log(`   ⚡  絕對濕度壓力指數 (Δe): ${Math.round(delta_e * 1000) / 1000} kPa`);
   console.log(`   🚦  燈號: ${light.emoji} ${light.name}`);
-  console.log(`   📋  判斷標準:`);
-  console.log(`       🟢 綠燈: Δe<0.9 且 40≤DI≤50`);
-  console.log(`       🟡 黃燈: 0.9≤Δe<1.25 或 35≤DI≤39 或 51≤DI≤55`);
-  console.log(`       🟠 橘燈: 1.25≤Δe<1.7 或 30≤DI≤34 或 56≤DI≤60`);
-  console.log(`       🔴 紅燈: Δe≥1.7 或 DI<30 或 DI>60`);
+  
+  // ============================================================
+  // ✅ 顯示觸發條件分析
+  // ============================================================
+  console.log(`\n   📋 觸發條件分析:`);
+  
+  const de = Math.round(delta_e * 1000) / 1000;
+  const diVal = Math.round(di * 10) / 10;
+  
+  // 綠燈條件
+  const isGreen = (de < 0.9 && diVal >= 40 && diVal <= 50);
+  
+  // 黃燈條件
+  const isYellowDE = (de >= 0.9 && de < 1.25);
+  const isYellowDI1 = (diVal >= 35 && diVal <= 39);
+  const isYellowDI2 = (diVal >= 51 && diVal <= 55);
+  const isYellow = isYellowDE || isYellowDI1 || isYellowDI2;
+  
+  // 橘燈條件
+  const isOrangeDE = (de >= 1.25 && de < 1.7);
+  const isOrangeDI1 = (diVal >= 30 && diVal <= 34);
+  const isOrangeDI2 = (diVal >= 56 && diVal <= 60);
+  const isOrange = isOrangeDE || isOrangeDI1 || isOrangeDI2;
+  
+  // 紅燈條件
+  const isRedDE = (de >= 1.7);
+  const isRedDI1 = (diVal < 30);
+  const isRedDI2 = (diVal > 60);
+  const isRed = isRedDE || isRedDI1 || isRedDI2;
+  
+  // 輸出各條件檢查結果
+  console.log(`   🔍 Δe = ${de} kPa`);
+  console.log(`      ${de < 0.9 ? '✅' : '❌'} 綠燈: Δe < 0.9 (${de < 0.9 ? '符合' : '不符合'})`);
+  console.log(`      ${isYellowDE ? '✅' : '❌'} 黃燈: 0.9 ≤ Δe < 1.25 (${isYellowDE ? '符合' : '不符合'})`);
+  console.log(`      ${isOrangeDE ? '✅' : '❌'} 橘燈: 1.25 ≤ Δe < 1.7 (${isOrangeDE ? '符合' : '不符合'})`);
+  console.log(`      ${isRedDE ? '✅' : '❌'} 紅燈: Δe ≥ 1.7 (${isRedDE ? '符合' : '不符合'})`);
+  
+  console.log(`   🔍 DI = ${diVal}`);
+  console.log(`      ${isYellowDI1 ? '✅' : '❌'} 黃燈: 35 ≤ DI ≤ 39 (${isYellowDI1 ? '符合' : '不符合'})`);
+  console.log(`      ${isOrangeDI1 ? '✅' : '❌'} 橘燈: 30 ≤ DI ≤ 34 (${isOrangeDI1 ? '符合' : '不符合'})`);
+  console.log(`      ${isGreen ? '✅' : '❌'} 綠燈: 40 ≤ DI ≤ 50 (${isGreen ? '符合' : '不符合'})`);
+  console.log(`      ${isYellowDI2 ? '✅' : '❌'} 黃燈: 51 ≤ DI ≤ 55 (${isYellowDI2 ? '符合' : '不符合'})`);
+  console.log(`      ${isOrangeDI2 ? '✅' : '❌'} 橘燈: 56 ≤ DI ≤ 60 (${isOrangeDI2 ? '符合' : '不符合'})`);
+  console.log(`      ${isRedDI1 ? '✅' : '❌'} 紅燈: DI < 30 (${isRedDI1 ? '符合' : '不符合'})`);
+  console.log(`      ${isRedDI2 ? '✅' : '❌'} 紅燈: DI > 60 (${isRedDI2 ? '符合' : '不符合'})`);
+  
+  // 顯示最終判定結果
+  console.log(`\n   🏆 最終判定:`);
+  if (isRed) {
+    const reasons = [];
+    if (isRedDE) reasons.push('Δe≥1.7');
+    if (isRedDI1) reasons.push('DI<30');
+    if (isRedDI2) reasons.push('DI>60');
+    console.log(`      🔴 紅燈：因 ${reasons.join(' 或 ')} 觸發`);
+  } else if (isOrange) {
+    const reasons = [];
+    if (isOrangeDE) reasons.push('1.25≤Δe<1.7');
+    if (isOrangeDI1) reasons.push('30≤DI≤34');
+    if (isOrangeDI2) reasons.push('56≤DI≤60');
+    console.log(`      🟠 橘燈：因 ${reasons.join(' 或 ')} 觸發`);
+  } else if (isYellow) {
+    const reasons = [];
+    if (isYellowDE) reasons.push('0.9≤Δe<1.25');
+    if (isYellowDI1) reasons.push('35≤DI≤39');
+    if (isYellowDI2) reasons.push('51≤DI≤55');
+    console.log(`      🟡 黃燈：因 ${reasons.join(' 或 ')} 觸發`);
+  } else if (isGreen) {
+    console.log(`      🟢 綠燈：因 Δe<0.9 且 40≤DI≤50 觸發`);
+  } else {
+    console.log(`      ⚠️  未匹配任何條件（可能資料異常）`);
+  }
+  
   console.log(`   ${'='.repeat(40)}`);
   
   return {
