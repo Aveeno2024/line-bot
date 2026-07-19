@@ -827,14 +827,14 @@ async function generatePage1Flex(startOffset = 0) {
     console.log(`⚠️ 使用備用日期: ${day0Label} ~ ${day1Label}`);
   }
   
-  // ============================================================
-  // ✅ 建立表格標題列（移除標題行，次日加 (預報)）
+   // ============================================================
+  // ✅ 建立表格標題列（移除標題行，次日加「預」）
   // ============================================================
   const bodyContents = [
     { type: "box", layout: "horizontal", contents: [
       { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2 },
       { type: "text", text: day0Label, weight: "bold", size: "lg", flex: 1, align: "center" },
-      { type: "text", text: `${day1Label}(預報)`, weight: "bold", size: "lg", flex: 1, align: "center" }
+      { type: "text", text: `預${day1Label}`, weight: "bold", size: "lg", flex: 1, align: "center" }
     ]},
     { type: "separator", margin: "sm" }
   ];
