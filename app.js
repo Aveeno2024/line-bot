@@ -1,5 +1,4 @@
 
-// ==========================================
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -684,8 +683,9 @@ function getDateString(offset = 0) {
   date.setDate(date.getDate() + offset);
   return `${date.getMonth()+1}/${date.getDate()}`;
 }
+
 // ==========================================
-// 燈號說明對照表（依照使用者提供內容 - 紅→橘→黃→綠排列）
+// 燈號說明對照表（新版精簡版 - 紅→橘→黃→綠排列）
 // ==========================================
 const LIGHT_DESCRIPTIONS = {
   "紅燈": {
@@ -722,7 +722,7 @@ const LIGHT_DESCRIPTIONS = {
   }
 };
 
-================
+// ==========================================
 // 錯誤訊息 Flex Message
 // ==========================================
 function getErrorFlexMessage() {
@@ -826,7 +826,7 @@ async function generatePage1Flex(startOffset = 0) {
     console.log(`⚠️ 使用備用日期: ${day0Label} ~ ${day1Label}`);
   }
   
-   // ============================================================
+  // ============================================================
   // ✅ 建立表格標題列（移除標題行，次日加「預」）
   // ============================================================
   const bodyContents = [
@@ -866,7 +866,7 @@ async function generatePage1Flex(startOffset = 0) {
   }
   
   // ============================================================
-  // ✅ 燈號說明（固定顯示全部 4 種燈號：紅→橘→黃→綠，完整版）
+  // ✅ 燈號說明（固定顯示全部 4 種燈號：紅→橘→黃→綠）
   // ============================================================
   bodyContents.push({ type: "separator", margin: "md" });
   bodyContents.push({
