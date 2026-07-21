@@ -19,7 +19,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ==========================================
+/ ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
 const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf98WzgO2eAvPXBSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9y6QgmS/F+EPNDkUgO2YsRBdpKhRv5J3Eh0PIfF6kt4QwdB04t89/1O/w1cDnyilFU=';
@@ -734,13 +734,12 @@ function getErrorFlexMessage() {
     altText: "⚠️ 中央氣象署 API 暫時無法連線",
     contents: {
       type: "bubble",
-      size: "mega",
+      size: "giga",
       header: {
         type: "box",
         layout: "vertical",
         contents: [
-          { type: "text", text: "⚠️ 服務暫時無法使用", weight: "bold", size: "xl", color: "#ffffff" },
-          { type: "text", text: `預報日期 ${today} ~ ${tomorrow}`, size: "md", color: "#dddddd", margin: "xs" }
+          { type: "text", text: "⚠️ 服務暫時無法使用", weight: "bold", size: "xl", color: "#ffffff", scaling: true }
         ],
         backgroundColor: "#FF6600",
         paddingAll: "20px"
@@ -750,12 +749,12 @@ function getErrorFlexMessage() {
         layout: "vertical",
         spacing: "md",
         contents: [
-          { type: "text", text: "中央氣象署 API 暫時無法連線", size: "lg", weight: "bold", color: "#FF0000", wrap: true },
-          { type: "text", text: "請稍後再試，或聯繫管理員。", size: "md", color: "#666666", wrap: true },
+          { type: "text", text: "中央氣象署 API 暫時無法連線", size: "lg", weight: "bold", color: "#FF0000", wrap: true, scaling: true },
+          { type: "text", text: "請稍後再試，或聯繫管理員。", size: "md", color: "#666666", wrap: true, scaling: true },
           { type: "separator", margin: "md" },
-          { type: "text", text: "💡 您可以嘗試：", size: "md", weight: "bold" },
-          { type: "text", text: "• 幾分鐘後重新查詢", size: "sm", color: "#666666" },
-          { type: "text", text: "• 加入 LINE 好友接收推播", size: "sm", color: "#666666" }
+          { type: "text", text: "💡 您可以嘗試：", size: "md", weight: "bold", scaling: true },
+          { type: "text", text: "• 幾分鐘後重新查詢", size: "sm", color: "#666666", scaling: true },
+          { type: "text", text: "• 加入 LINE 好友接收推播", size: "sm", color: "#666666", scaling: true }
         ],
         paddingAll: "20px"
       },
@@ -764,7 +763,7 @@ function getErrorFlexMessage() {
         layout: "vertical",
         contents: [
           { type: "separator" },
-          { type: "text", text: "📊 中央氣象署", size: "xs", color: "#999999", align: "center" }
+          { type: "text", text: "📊 中央氣象署", size: "xs", color: "#999999", align: "center", scaling: true }
         ],
         paddingAll: "12px"
       }
@@ -774,6 +773,7 @@ function getErrorFlexMessage() {
 
 // ==========================================
 // 第一頁：Flex Message（6都預報表格 - 單頁版 + 固定完整燈號說明）
+// 使用 giga 尺寸 + 字體縮放
 // ==========================================
 async function generatePage1Flex(startOffset = 0) {
   const citiesData = [];
@@ -831,9 +831,9 @@ async function generatePage1Flex(startOffset = 0) {
   // ============================================================
   const bodyContents = [
     { type: "box", layout: "horizontal", contents: [
-      { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2 },
-      { type: "text", text: day0Label, weight: "bold", size: "lg", flex: 1, align: "center" },
-      { type: "text", text: `預${day1Label}`, weight: "bold", size: "lg", flex: 1, align: "center" }
+      { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2, scaling: true },
+      { type: "text", text: day0Label, weight: "bold", size: "lg", flex: 1, align: "center", scaling: true },
+      { type: "text", text: `預${day1Label}`, weight: "bold", size: "lg", flex: 1, align: "center", scaling: true }
     ]},
     { type: "separator", margin: "sm" }
   ];
@@ -858,9 +858,9 @@ async function generatePage1Flex(startOffset = 0) {
     
     bodyContents.push({
       type: "box", layout: "horizontal", contents: [
-        { type: "text", text: cityData.city, size: "lg", flex: 2 },
-        { type: "text", text: emoji0, size: "xl", flex: 1, align: "center", color: color0 },
-        { type: "text", text: emoji1, size: "xl", flex: 1, align: "center", color: color1 }
+        { type: "text", text: cityData.city, size: "lg", flex: 2, scaling: true },
+        { type: "text", text: emoji0, size: "xl", flex: 1, align: "center", color: color0, scaling: true },
+        { type: "text", text: emoji1, size: "xl", flex: 1, align: "center", color: color1, scaling: true }
       ]
     });
   }
@@ -874,7 +874,8 @@ async function generatePage1Flex(startOffset = 0) {
     text: "📋 燈號說明",
     weight: "bold",
     size: "md",
-    margin: "sm"
+    margin: "sm",
+    scaling: true
   });
   
   // 定義所有燈號（從紅到綠）
@@ -894,14 +895,16 @@ async function generatePage1Flex(startOffset = 0) {
         weight: "bold",
         size: "sm",
         color: light.color,
-        margin: "sm"
+        margin: "sm",
+        scaling: true
       });
       bodyContents.push({
         type: "text",
         text: info.desc,
         size: "sm",
         color: "#666666",
-        wrap: true
+        wrap: true,
+        scaling: true
       });
       for (const suggestion of info.suggestions) {
         bodyContents.push({
@@ -909,7 +912,8 @@ async function generatePage1Flex(startOffset = 0) {
           text: suggestion,
           size: "xs",
           color: "#666666",
-          wrap: true
+          wrap: true,
+          scaling: true
         });
       }
     }
@@ -926,12 +930,12 @@ async function generatePage1Flex(startOffset = 0) {
   // ============================================================
   const footerContents = [
     { type: "separator" },
-    { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center" },
-    { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "md", color: "#999999", align: "center" },
-    { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center" },
+    { type: "text", text: `🕐 資料時間：${dataTimeStr}`, size: "sm", color: "#999999", align: "center", scaling: true },
+    { type: "text", text: "🏠 室內基準溫度：冷氣房 26℃", size: "md", color: "#999999", align: "center", scaling: true },
+    { type: "text", text: "📊 數據來源：中央氣象署", size: "sm", color: "#999999", align: "center", scaling: true },
     { type: "separator", margin: "sm" },
-    { type: "text", text: "🔍 輸入「全台」查詢｜「詳細說明」看完整介紹", size: "xs", color: "#999999", align: "center", wrap: true },
-    { type: "text", text: "🔔 輸入「加入訂閱」開啟｜「取消訂閱」關閉每日提醒", size: "xs", color: "#999999", align: "center", wrap: true }
+    { type: "text", text: "🔍 輸入「全台」查詢｜「詳細說明」看完整介紹", size: "xs", color: "#999999", align: "center", wrap: true, scaling: true },
+    { type: "text", text: "🔔 輸入「加入訂閱」開啟｜「取消訂閱」關閉每日提醒", size: "xs", color: "#999999", align: "center", wrap: true, scaling: true }
   ];
   
   if (hasError) {
@@ -941,12 +945,13 @@ async function generatePage1Flex(startOffset = 0) {
       size: "sm", 
       color: "#FF6600", 
       align: "center",
-      wrap: true
+      wrap: true,
+      scaling: true
     });
   }
   
   // ============================================================
-  // ✅ 回傳 Flex Message
+  // ✅ 回傳 Flex Message（使用 giga 尺寸）
   // ============================================================
   return {
     page1: {
@@ -954,12 +959,19 @@ async function generatePage1Flex(startOffset = 0) {
       altText: `🌡️💧 皮膚濕度壓力指數 ${day0Label}~${day1Label}`,
       contents: {
         type: "bubble",
-        size: "mega",
+        size: "giga",
         header: {
           type: "box",
           layout: "vertical",
           contents: [
-            { type: "text", text: "🌡️💧 皮膚濕度壓力指數", weight: "bold", size: "xl", color: "#ffffff" }
+            { 
+              type: "text", 
+              text: "🌡️💧 皮膚濕度壓力指數", 
+              weight: "bold", 
+              size: "xl", 
+              color: "#ffffff",
+              scaling: true
+            }
           ],
           backgroundColor: "#667eea",
           paddingAll: "20px"
@@ -996,7 +1008,8 @@ async function generatePage2Flex(day0Lights = new Set()) {
       text: "📋 今日尚無燈號資料，請稍後再查詢。",
       size: "md",
       color: "#666666",
-      wrap: true
+      wrap: true,
+      scaling: true
     });
   } else {
     for (const lightName of validLights) {
@@ -1013,14 +1026,16 @@ async function generatePage2Flex(day0Lights = new Set()) {
             "橘燈": "#FF8C00",
             "紅燈": "#FF0000"
           }[lightName] || "#666666",
-          margin: "sm"
+          margin: "sm",
+          scaling: true
         });
         bodyContents.push({
           type: "text",
           text: info.desc,
           size: "sm",
           color: "#666666",
-          wrap: true
+          wrap: true,
+          scaling: true
         });
         for (const suggestion of info.suggestions) {
           bodyContents.push({
@@ -1028,7 +1043,8 @@ async function generatePage2Flex(day0Lights = new Set()) {
             text: suggestion,
             size: "sm",
             color: "#666666",
-            wrap: true
+            wrap: true,
+            scaling: true
           });
         }
         if (lightName !== validLights[validLights.length - 1]) {
@@ -1039,25 +1055,25 @@ async function generatePage2Flex(day0Lights = new Set()) {
   }
   
   bodyContents.push({ type: "separator", margin: "md" });
-  bodyContents.push({ type: "text", text: "🔍 查詢指令", weight: "bold", size: "md" });
-  bodyContents.push({ type: "text", text: "• 輸入「全台」查看六都2天預報", size: "sm", color: "#666666", wrap: true });
-  bodyContents.push({ type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "sm", color: "#666666", wrap: true });
+  bodyContents.push({ type: "text", text: "🔍 查詢指令", weight: "bold", size: "md", scaling: true });
+  bodyContents.push({ type: "text", text: "• 輸入「全台」查看六都2天預報", size: "sm", color: "#666666", wrap: true, scaling: true });
+  bodyContents.push({ type: "text", text: "• 輸入「詳細說明」查看本頁面", size: "sm", color: "#666666", wrap: true, scaling: true });
   bodyContents.push({ type: "separator", margin: "md" });
-  bodyContents.push({ type: "text", text: "🔔 訂閱管理", weight: "bold", size: "md" });
-  bodyContents.push({ type: "text", text: "• 輸入「加入訂閱」開啟每日提醒", size: "sm", color: "#666666", wrap: true });
-  bodyContents.push({ type: "text", text: "• 輸入「取消訂閱」關閉每日提醒", size: "sm", color: "#666666", wrap: true });
+  bodyContents.push({ type: "text", text: "🔔 訂閱管理", weight: "bold", size: "md", scaling: true });
+  bodyContents.push({ type: "text", text: "• 輸入「加入訂閱」開啟每日提醒", size: "sm", color: "#666666", wrap: true, scaling: true });
+  bodyContents.push({ type: "text", text: "• 輸入「取消訂閱」關閉每日提醒", size: "sm", color: "#666666", wrap: true, scaling: true });
   
   return {
     type: "flex",
     altText: "📋 燈號說明與保健建議",
     contents: {
       type: "bubble",
-      size: "mega",
+      size: "giga",
       header: {
         type: "box",
         layout: "vertical",
         contents: [
-          { type: "text", text: "📋 燈號說明與保健建議", weight: "bold", size: "xl", color: "#ffffff" }
+          { type: "text", text: "📋 燈號說明與保健建議", weight: "bold", size: "xl", color: "#ffffff", scaling: true }
         ],
         backgroundColor: "#667eea",
         paddingAll: "20px"
@@ -1074,8 +1090,8 @@ async function generatePage2Flex(day0Lights = new Set()) {
         layout: "vertical",
         contents: [
           { type: "separator" },
-          { type: "text", text: "📊 皮膚壓力指數 (SHPI) 燈號保健建議", size: "xs", color: "#999999", align: "center" },
-          { type: "text", text: "📖 科學依據：Denda et al. (2002)", size: "xs", color: "#999999", align: "center" }
+          { type: "text", text: "📊 皮膚壓力指數 (SHPI) 燈號保健建議", size: "xs", color: "#999999", align: "center", scaling: true },
+          { type: "text", text: "📖 科學依據：Denda et al. (2002)", size: "xs", color: "#999999", align: "center", scaling: true }
         ],
         paddingAll: "12px"
       }
