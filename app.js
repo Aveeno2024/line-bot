@@ -684,9 +684,8 @@ function getDateString(offset = 0) {
   date.setDate(date.getDate() + offset);
   return `${date.getMonth()+1}/${date.getDate()}`;
 }
-
 // ==========================================
-// 燈號說明對照表（新版精簡版 - 紅→橘→黃→綠排列）
+// 燈號說明對照表（依照使用者提供內容 - 紅→橘→黃→綠排列）
 // ==========================================
 const LIGHT_DESCRIPTIONS = {
   "紅燈": {
@@ -723,7 +722,7 @@ const LIGHT_DESCRIPTIONS = {
   }
 };
 
-// ==========================================
+================
 // 錯誤訊息 Flex Message
 // ==========================================
 function getErrorFlexMessage() {
