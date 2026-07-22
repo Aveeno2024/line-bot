@@ -22,11 +22,11 @@ app.use((req, res, next) => {
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
-const CHANNEL_ACCESS_TOKEN = 'FpYYGobL5CFc3u5lsVOEGfHTSEYHHiw7P3e25FD5MhqusbsANf98WzgO2eAvPXBSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9y6QgmS/F+EPNDkUgO2YsRBdpKhRv5J3Eh0PIfF6kt4QwdB04t89/1O/w1cDnyilFU=';
+const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
-// GitHub 設定
+// GitHub 設定 (可選)
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO;
 
@@ -58,7 +58,6 @@ const rateLimit = {
 // 檢查是否超過全域限流
 function isRateLimited() {
   const now = Date.now();
-  // 清除超過時間窗口的紀錄
   rateLimit.requests = rateLimit.requests.filter(time => now - time < rateLimit.window);
   
   if (rateLimit.requests.length >= rateLimit.maxRequests) {
@@ -74,7 +73,6 @@ function isUserRateLimited(userId) {
   const now = Date.now();
   const lastTime = userLastQueryTime[userId] || 0;
   
-  // 30 秒冷卻時間
   if (now - lastTime < 30000) {
     return true;
   }
@@ -84,17 +82,16 @@ function isUserRateLimited(userId) {
 }
 
 // ==========================================
-// ⭐ 訊息佇列（用於推播）
+// ⭐ 訊息佇列
 // ==========================================
 
 class MessageQueue {
   constructor() {
     this.queue = [];
     this.isProcessing = false;
-    this.delay = 500; // 每則訊息間隔 500ms
+    this.delay = 500;
   }
   
-  // 加入訊息到佇列
   add(message) {
     this.queue.push(message);
     if (!this.isProcessing) {
@@ -102,7 +99,6 @@ class MessageQueue {
     }
   }
   
-  // 處理佇列
   async processQueue() {
     if (this.queue.length === 0) {
       this.isProcessing = false;
@@ -119,13 +115,11 @@ class MessageQueue {
       reject(error);
     }
     
-    // 延遲後處理下一則
     setTimeout(() => {
       this.processQueue();
     }, this.delay);
   }
   
-  // 取得佇列長度
   get length() {
     return this.queue.length;
   }
@@ -134,8 +128,9 @@ class MessageQueue {
 const messageQueue = new MessageQueue();
 
 // ==========================================
-// 推播函數（使用佇列）
+// 推播函數
 // ==========================================
+
 async function pushToUser(userId, page1) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1] }, {
@@ -149,7 +144,6 @@ async function pushToUser(userId, page1) {
   }
 }
 
-// 加入佇列的推播函數
 function pushToUserQueued(userId, page1) {
   return new Promise((resolve, reject) => {
     messageQueue.add({ userId, page1, resolve, reject });
@@ -244,7 +238,7 @@ function saveSubscribers() {
 // 室內環境設定
 // ==========================================
 const INDOOR_TEMP = 26;
-const ES_26 = 3.36; // 26℃ 飽和水蒸氣壓 (kPa)
+const ES_26 = 3.36;
 
 const CITIES = [
   { code: "1", name: "臺北市", displayName: "臺北市", apiName: "臺北市" },
@@ -259,19 +253,10 @@ const CITIES = [
 // SHPI V4 核心計算函數
 // ==========================================
 
-/**
- * Tetens 公式：計算飽和水蒸氣壓
- * e_s(T) = 0.6112 * exp(17.67 * T / (T + 243.5))
- */
 function calcSaturationVaporPressure(temp) {
   return 0.6112 * Math.exp((17.67 * temp) / (temp + 243.5));
 }
 
-/**
- * 計算室內穩態水蒸氣壓 e_in
- * e_in = 1.70 + 0.06*(T_out - 28) + 0.004*(RH_out - 50)
- * 限制在 1.45 ~ 2.20 之間
- */
 function calcIndoorVaporPressure(tempOut, humOut) {
   let e_in = 1.70 + 0.06 * (tempOut - 28) + 0.004 * (humOut - 50);
   if (e_in < 1.45) e_in = 1.45;
@@ -279,38 +264,24 @@ function calcIndoorVaporPressure(tempOut, humOut) {
   return e_in;
 }
 
-/**
- * 計算乾燥指數 DI = 100 - RH_in
- * RH_in = 100 * e_in / 3.36
- */
 function calcDI(e_in) {
   const RH_in = 100 * e_in / ES_26;
   return 100 - RH_in;
 }
 
-/**
- * 燈號判定（SHPI V4 版）
- * 🟢 綠燈：Δe < 0.9 且 40 ≤ DI ≤ 50
- * 🟡 黃燈：0.9 ≤ Δe < 1.25 或 35 ≤ DI ≤ 39 或 51 ≤ DI ≤ 55
- * 🟠 橘燈：1.25 ≤ Δe < 1.7 或 30 ≤ DI ≤ 34 或 56 ≤ DI ≤ 60
- * 🔴 紅燈：Δe ≥ 1.7 或 DI < 30 或 DI > 60
- */
 function getLightLevel(delta_e, di) {
   if (delta_e >= 1.7 || di < 30 || di > 60) {
-    return { level: 4, name: "紅燈", emoji: "🔴", color: "#FF0000", bgColor: "#FF0000", textColor: "#FFFFFF" };
+    return { level: 4, name: "紅燈", emoji: "🔴", color: "#FF0000" };
   }
   if ((delta_e >= 1.25 && delta_e < 1.7) || (di >= 30 && di <= 34) || (di >= 56 && di <= 60)) {
-    return { level: 3, name: "橘燈", emoji: "🟠", color: "#FF8C00", bgColor: "#FF8C00", textColor: "#FFFFFF" };
+    return { level: 3, name: "橘燈", emoji: "🟠", color: "#FF8C00" };
   }
   if ((delta_e >= 0.9 && delta_e < 1.25) || (di >= 35 && di <= 39) || (di >= 51 && di <= 55)) {
-    return { level: 2, name: "黃燈", emoji: "🟡", color: "#FFD700", bgColor: "#FFD700", textColor: "#333333" };
+    return { level: 2, name: "黃燈", emoji: "🟡", color: "#FFD700" };
   }
-  return { level: 1, name: "綠燈", emoji: "🟢", color: "#00CC00", bgColor: "#00CC00", textColor: "#FFFFFF" };
+  return { level: 1, name: "綠燈", emoji: "🟢", color: "#00CC00" };
 }
 
-/**
- * 完整 SHPI V4 計算（單日）- 含詳細 LOG
- */
 function calculateSHPI(tempOut, humOut) {
   const e_s = calcSaturationVaporPressure(tempOut);
   const e_out = e_s * humOut / 100;
@@ -322,10 +293,8 @@ function calculateSHPI(tempOut, humOut) {
   console.log(`\n   📊 ===== SHPI V4 計算結果 =====`);
   console.log(`   🌡️  氣溫: ${Math.round(tempOut)}℃`);
   console.log(`   💧  室外濕度: ${Math.round(humOut)}%`);
-  console.log(`   📐  飽和水蒸氣壓 (e_s): ${Math.round(e_s * 1000) / 1000} kPa`);
   console.log(`   📤  室外水蒸氣壓 (e_out): ${Math.round(e_out * 1000) / 1000} kPa`);
   console.log(`   📥  室內水蒸氣壓 (e_in): ${Math.round(e_in * 1000) / 1000} kPa`);
-  console.log(`   📊  室內相對濕度 (RH_in): ${Math.round(100 * e_in / ES_26)}%`);
   console.log(`   🔥  室內乾燥指數 (DI): ${Math.round(di * 10) / 10}`);
   console.log(`   ⚡  絕對濕度壓力指數 (Δe): ${Math.round(delta_e * 1000) / 1000} kPa`);
   console.log(`   🚦  燈號: ${light.emoji} ${light.name}`);
@@ -334,7 +303,6 @@ function calculateSHPI(tempOut, humOut) {
   return {
     tempOut: Math.round(tempOut),
     humOut: Math.round(humOut),
-    e_s: Math.round(e_s * 1000) / 1000,
     e_out: Math.round(e_out * 1000) / 1000,
     e_in: Math.round(e_in * 1000) / 1000,
     di: Math.round(di * 10) / 10,
@@ -381,40 +349,6 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     const response = await axios.get(url, { timeout: 15000 });
     const data = response.data;
     
-    console.log(`\n   📦 ===== API 完整回應結構檢查 =====`);
-    console.log(`   🔍 success: ${data.success}`);
-    console.log(`   🔍 records 存在: ${!!data.records}`);
-    
-    if (data.records) {
-      console.log(`   🔍 Locations 存在: ${!!data.records.Locations}`);
-      if (data.records.Locations) {
-        console.log(`   🔍 Locations 數量: ${data.records.Locations.length}`);
-        for (let i = 0; i < data.records.Locations.length; i++) {
-          const locSet = data.records.Locations[i];
-          console.log(`   📍 Location[${i}]: ${locSet.LocationsName || '無名稱'}`);
-          if (locSet.Location) {
-            console.log(`      📍 包含 ${locSet.Location.length} 個城市`);
-            for (const loc of locSet.Location) {
-              if (loc.LocationName === city.apiName) {
-                console.log(`      ✅ 找到目標城市: ${loc.LocationName}`);
-                if (loc.WeatherElement) {
-                  console.log(`      📊 WeatherElement 數量: ${loc.WeatherElement.length}`);
-                  for (const elem of loc.WeatherElement) {
-                    console.log(`         📊 ${elem.ElementName}: ${elem.Time ? elem.Time.length : 0} 筆資料`);
-                    if (elem.Time && elem.Time.length > 0) {
-                      const times = elem.Time.slice(0, 3).map(t => t.DataTime).join(', ');
-                      console.log(`            🕐 時間範例: ${times}${elem.Time.length > 3 ? ' ...' : ''}`);
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    console.log(`   ${'='.repeat(50)}`);
-    
     if (data.success !== "true") {
       console.log(`❌ API 回應失敗: ${data.success}`);
       return null;
@@ -454,11 +388,6 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     
     const targetDateStr = getTaiwanDateString(dateOffset);
     console.log(`📅 目標日期 (台灣時間): ${targetDateStr}`);
-    
-    console.log(`\n   📋 ===== ${city.displayName} 所有可用時間點 (溫度) =====`);
-    const allTimes = tempElem.Time.map(t => t.DataTime).join(', ');
-    console.log(`   🕐 ${allTimes}`);
-    console.log(`   ${'='.repeat(50)}`);
     
     let tempValue = null, humValue = null;
     let actualDataTime = null;
@@ -545,10 +474,6 @@ async function getCurrentWeather(city) {
   }
 }
 
-// ==========================================
-// 獲取天氣資料
-// ==========================================
-
 async function getWeather(city, dateOffset = 0, targetHour = 14) {
   try {
     const now = getTaiwanTime();
@@ -602,10 +527,6 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
   }
 }
 
-// ==========================================
-// 計算起始偏移量
-// ==========================================
-
 function calculateStartOffset() {
   const hours = getTaiwanHour();
   const minutes = getTaiwanMinute();
@@ -619,10 +540,6 @@ function calculateStartOffset() {
     return 0;
   }
 }
-
-// ==========================================
-// 計算城市 2 天預報
-// ==========================================
 
 async function calculateCityTwoDays(city, startOffset = 0, targetHour = 14) {
   console.log(`\n${'='.repeat(60)}`);
@@ -1064,6 +981,32 @@ async function generatePage2Flex() {
 }
 
 // ==========================================
+// 回覆函數
+// ==========================================
+
+async function replyFlexMessage(replyToken, flexMessage) {
+  try {
+    await axios.post('https://api.line.me/v2/bot/message/reply', { replyToken, messages: [flexMessage] }, {
+      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
+    });
+    console.log('✅ Flex Message 回復成功');
+  } catch (err) {
+    console.error('❌ 回復失敗:', err.response?.data || err.message);
+  }
+}
+
+async function replyTextMessage(replyToken, text) {
+  try {
+    await axios.post('https://api.line.me/v2/bot/message/reply', { replyToken, messages: [{ type: 'text', text }] }, {
+      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
+    });
+    console.log('✅ 文字回復成功');
+  } catch (err) {
+    console.error('❌ 回復失敗:', err.response?.data || err.message);
+  }
+}
+
+// ==========================================
 // 快取管理函數
 // ==========================================
 
@@ -1077,7 +1020,6 @@ async function precomputeAndCache() {
   try {
     const page1Result = await generatePage1Flex(startOffset);
     const page1 = page1Result.page1;
-    
     const page2 = await generatePage2Flex();
     
     cachedForecast = { page1, page2 };
@@ -1144,7 +1086,6 @@ async function dailyPublishTask() {
     console.log(`📤 推播給 ${subscribers.length} 位個人訂閱者`);
     console.log(`📊 訊息佇列長度: ${messageQueue.length}`);
     
-    // 使用佇列推播
     for (const userId of subscribers) {
       await pushToUserQueued(userId, cache.page1);
     }
@@ -1156,41 +1097,6 @@ async function dailyPublishTask() {
   }
   
   console.log(`✅ 每日發布任務完成\n`);
-}
-
-async function replyFlexMessage(replyToken, flexMessage) {
-  try {
-    await axios.post('https://api.line.me/v2/bot/message/reply', { replyToken, messages: [flexMessage] }, {
-      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
-    });
-    console.log('✅ Flex Message 回復成功');
-  } catch (err) {
-    console.error('❌ 回復失敗:', err.response?.data || err.message);
-  }
-}
-
-async function replyTextMessage(replyToken, text) {
-  try {
-    await axios.post('https://api.line.me/v2/bot/message/reply', { replyToken, messages: [{ type: 'text', text }] }, {
-      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
-    });
-    console.log('✅ 文字回復成功');
-  } catch (err) {
-    console.error('❌ 回復失敗:', err.response?.data || err.message);
-  }
-}
-
-async function sendPrivateMessage(userId, page1) {
-  try {
-    await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1] }, {
-      headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
-    });
-    console.log(`✅ 私訊發送成功: ${userId}`);
-    return true;
-  } catch (err) {
-    console.error(`❌ 私訊發送失敗: ${userId}`);
-    return false;
-  }
 }
 
 // ==========================================
@@ -1225,7 +1131,7 @@ app.get('/api/refresh-cache', async (req, res) => {
 });
 
 // ==========================================
-// LINE Webhook
+// ⭐ LINE Webhook 端點（關鍵位置）
 // ==========================================
 app.post('/webhook', async (req, res) => {
   console.log('📨 收到 Webhook');
@@ -1440,7 +1346,6 @@ console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7
 // ⭐ 定時預計算任務（僅 06:30 主要）
 // ==========================================
 
-// 06:30 預計算 - 抓取當天 14:00 預報，確保 7:00 推播使用最新資料
 cron.schedule('30 6 * * *', () => {
   console.log(`\n⏰ [06:30] 預計算 - 抓取當天 14:00 預報，確保 7:00 推播使用最新資料`);
   precomputeAndCache();
