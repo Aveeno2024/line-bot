@@ -10,6 +10,11 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
+// ✅ 靜態檔案服務（讓 Render 可以存取 public/images 中的圖片）
+// ==========================================
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
+
+// ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
 const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
@@ -602,51 +607,11 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 上傳圖片到 Cloudinary
-// ==========================================
-async function uploadToImgur(imageBuffer) {
-  try {
-    const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
-    const API_KEY = process.env.CLOUDINARY_API_KEY;
-    const API_SECRET = process.env.CLOUDINARY_API_SECRET;
-    
-    if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
-      console.error('❌ 未設定 Cloudinary 環境變數');
-      return null;
-    }
-    
-    const formData = new FormData();
-    formData.append('file', imageBuffer.toString('base64'));
-    formData.append('upload_preset', 'ml_default');
-    
-    const response = await axios.post(
-      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-      formData,
-      {
-        headers: formData.getHeaders(),
-        timeout: 30000
-      }
-    );
-    
-    if (response.data && response.data.secure_url) {
-      console.log('✅ 圖片上傳成功');
-      return response.data.secure_url;
-    } else {
-      console.error('❌ 上傳失敗:', response.data);
-      return null;
-    }
-    
-  } catch (error) {
-    console.error('❌ 上傳失敗:', error.response?.data || error.message);
-    return null;
-  }
-}
-
-// ==========================================
-// ✅ 產生第一頁圖片訊息
+// ✅ 產生第一頁圖片訊息（使用 Render 靜態圖片）
 // ==========================================
 async function generatePage1ImageFlex(startOffset = 0) {
   try {
+    // 計算燈號數據
     const citiesData = [];
     let globalDataTime = null;
     
@@ -680,21 +645,37 @@ async function generatePage1ImageFlex(startOffset = 0) {
     
     // 生成圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
-    if (!imageBuffer) return null;
+    if (!imageBuffer) {
+      // 如果生成失敗，回傳靜態模板圖片
+      const baseUrl = 'https://line-bot-v9q8.onrender.com';
+      return {
+        type: 'image',
+        originalContentUrl: `${baseUrl}/images/template_page1.png`,
+        previewImageUrl: `${baseUrl}/images/template_page1.png`
+      };
+    }
     
-    // 上傳到 Cloudinary
-    const imageUrl = await uploadToImgur(imageBuffer);
-    if (!imageUrl) return null;
+    // ✅ 儲存動態生成的圖片到 Render 的 public/images/ 目錄
+    const outputPath = path.join(__dirname, 'public/images/current_page1.png');
+    await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
+    console.log('✅ 圖片已儲存到 public/images/current_page1.png');
     
+    const baseUrl = 'https://line-bot-v9q8.onrender.com';
     return {
       type: 'image',
-      originalContentUrl: imageUrl,
-      previewImageUrl: imageUrl
+      originalContentUrl: `${baseUrl}/images/current_page1.png`,
+      previewImageUrl: `${baseUrl}/images/current_page1.png`
     };
     
   } catch (error) {
     console.error('❌ 產生圖片訊息失敗:', error.message);
-    return null;
+    // 回傳靜態模板圖片作為備用
+    const baseUrl = 'https://line-bot-v9q8.onrender.com';
+    return {
+      type: 'image',
+      originalContentUrl: `${baseUrl}/images/template_page1.png`,
+      previewImageUrl: `${baseUrl}/images/template_page1.png`
+    };
   }
 }
 
@@ -794,6 +775,7 @@ async function precomputeAndCache() {
   const startTime = Date.now();
   
   try {
+    // 預先計算數據
     const citiesData = [];
     let globalDataTime = null;
     
@@ -826,18 +808,20 @@ async function precomputeAndCache() {
       }
     }
     
-    // 生成並上傳第一頁圖片
+    // 生成並儲存第一頁圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     let page1 = null;
     if (imageBuffer) {
-      const imageUrl = await uploadToImgur(imageBuffer);
-      if (imageUrl) {
-        page1 = {
-          type: 'image',
-          originalContentUrl: imageUrl,
-          previewImageUrl: imageUrl
-        };
-      }
+      const outputPath = path.join(__dirname, 'public/images/current_page1.png');
+      await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
+      console.log('✅ 快取圖片已儲存');
+      
+      const baseUrl = 'https://line-bot-v9q8.onrender.com';
+      page1 = {
+        type: 'image',
+        originalContentUrl: `${baseUrl}/images/current_page1.png`,
+        previewImageUrl: `${baseUrl}/images/current_page1.png`
+      };
     }
     
     // 第二頁固定圖片
