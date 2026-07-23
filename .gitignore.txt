@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.log
+cached_forecast.json
+subscribers.json
+groups.json
+.DS_Store
