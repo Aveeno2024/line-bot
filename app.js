@@ -19,7 +19,7 @@ app.use((req, res, next) => {
   next();
 });
 
-/ ==========================================
+// ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
 const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
