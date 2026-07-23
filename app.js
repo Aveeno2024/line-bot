@@ -602,29 +602,36 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 上傳圖片到 Imgur
+// ✅ 上傳圖片到 ImgBB
 // ==========================================
 async function uploadToImgur(imageBuffer) {
   try {
-    const IMGUR_CLIENT_ID = process.env.IMGUR_CLIENT_ID;
-    if (!IMGUR_CLIENT_ID) {
-      console.error('❌ 未設定 IMGUR_CLIENT_ID 環境變數');
-      return null;
-    }
+    // 使用 ImgBB API
+    const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
+    
+    // 如果沒有設定 API Key，嘗試使用公開上傳（每日有限制）
+    const apiKey = IMGBB_API_KEY || 'free';
     
     const formData = new FormData();
     formData.append('image', imageBuffer.toString('base64'));
     
-    const response = await axios.post('https://api.imgur.com/3/image', formData, {
-      headers: {
-        'Authorization': `Client-ID ${IMGUR_CLIENT_ID}`,
-        ...formData.getHeaders()
-      },
-      timeout: 30000
-    });
+    const response = await axios.post(
+      `https://api.imgbb.com/1/upload?key=${apiKey}`,
+      formData,
+      {
+        headers: formData.getHeaders(),
+        timeout: 30000
+      }
+    );
     
-    console.log('✅ 圖片上傳成功');
-    return response.data.data.link;
+    if (response.data && response.data.data) {
+      console.log('✅ 圖片上傳成功');
+      // 回傳 display_url（可直接顯示的圖片網址）
+      return response.data.data.display_url || response.data.data.url;
+    } else {
+      console.error('❌ 上傳失敗:', response.data);
+      return null;
+    }
     
   } catch (error) {
     console.error('❌ 上傳失敗:', error.response?.data || error.message);
