@@ -19,8 +19,7 @@ app.use((req, res, next) => {
   next();
 });
 
-
-// ==========================================
+/ ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
 const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
@@ -934,7 +933,7 @@ async function generatePage2Flex(day0Lights = new Set()) {
   bodyContents.push({ type: "separator", margin: "md" });
   bodyContents.push({ type: "text", text: "🔍 查詢指令", weight: "bold", size: "md", scaling: true });
   bodyContents.push({ type: "text", text: "• 輸入「全台」查看六都2天預報", size: "sm", color: "#666666", wrap: true, scaling: true });
-  bodyContents.push({ type: "text", text: "• 輸入「說明」查看本頁面", size: "sm", color: "#666666", wrap: true, scaling: true });
+  bodyContents.push({ type: "text", text: "• 輸入「燈號說明」查看本頁面", size: "sm", color: "#666666", wrap: true, scaling: true });
   
   // ============================================================
   // ✅ 訂閱管理
@@ -1214,7 +1213,22 @@ app.post('/webhook', async (req, res) => {
         }
         
         // ============================================================
-        // ⭐ 使用者限流檢查
+        // ⭐ 燈號說明（點擊按鈕後觸發）- 不受使用者限流限制
+        // 移到限流檢查之前
+        // ============================================================
+        if (input === '燈號說明' || input === '說明') {
+          const cache = await getCachedForecast();
+          if (cache && cache.page2) {
+            await replyFlexMessage(replyToken, cache.page2);
+          } else {
+            const page2 = await generatePage2Flex(new Set());
+            await replyFlexMessage(replyToken, page2);
+          }
+          continue;  // ✅ 跳過後續限流檢查
+        }
+        
+        // ============================================================
+        // ⭐ 使用者限流檢查（排除「燈號說明」和「說明」）
         // ============================================================
         if (isUserRateLimited(sourceId)) {
           console.log(`⚠️ 使用者限流觸發: ${sourceId}`);
@@ -1252,27 +1266,12 @@ app.post('/webhook', async (req, res) => {
         }
         
         // ============================================================
-        // ⭐ 燈號說明（點擊按鈕後觸發）
-        // ============================================================
-        if (input === '燈號說明' || input === '說明') {
-          const cache = await getCachedForecast();
-          if (cache && cache.page2) {
-            await replyFlexMessage(replyToken, cache.page2);
-          } else {
-            const page2 = await generatePage2Flex(new Set());
-            await replyFlexMessage(replyToken, page2);
-          }
-          continue;
-        }
-        
-        // ============================================================
         // ⭐ 全台查詢（群組直接回應）
         // ============================================================
         if (input === '全台' || input === 'ALL') {
           const cache = await getCachedForecast();
           
           if (cache && cache.page1) {
-            // ✅ 無論是個人還是群組，都直接在頻道中回覆 Flex Message
             await replyFlexMessage(replyToken, cache.page1);
           } else {
             const errorMsg = getErrorFlexMessage();
