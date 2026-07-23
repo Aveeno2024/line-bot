@@ -3,22 +3,11 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const cron = require('node-cron');
-const { createCanvas, loadImage, registerFont } = require('canvas');
+const Jimp = require('jimp');
 const path = require('path');
 const FormData = require('form-data');
 const app = express();
 app.use(express.json());
-
-// ==========================================
-// ✅ 註冊中文字體
-// ==========================================
-try {
-  registerFont(path.join(__dirname, 'public/fonts/NotoSansTC-Regular.ttf'), { family: 'NotoSansTC' });
-  registerFont(path.join(__dirname, 'public/fonts/NotoSansTC-Bold.ttf'), { family: 'NotoSansTC-Bold' });
-  console.log('✅ 中文字體註冊成功');
-} catch (e) {
-  console.log('⚠️ 中文字體未找到，將使用系統預設字體');
-}
 
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
@@ -560,68 +549,51 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// ✅ 第一頁圖片生成函數（動態寫入文字）
+// ✅ 使用 Jimp 生成第一頁圖片
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
     // 載入模板
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
-    const image = await loadImage(templatePath);
+    const image = await Jimp.read(templatePath);
     
-    const width = 1040;
-    const height = 1200;
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext('2d');
+    // Jimp 內建字體
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
-    // 繪製背景
-    ctx.drawImage(image, 0, 0, width, height);
+    // 寫入日期
+    image.print(font, 400, 140, day0Label);
+    image.print(font, 680, 140, `預${day1Label}`);
     
-    // ---- 寫入日期 ----
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = 'bold 40px "NotoSansTC-Bold", "PingFang TC", "Microsoft JhengHei", sans-serif';
-    ctx.fillStyle = '#333333';
-    ctx.fillText(day0Label, 520, 165);
-    ctx.fillText(`預${day1Label}`, 780, 165);
-    
-    // ---- 寫入城市燈號 ----
+    // 寫入城市燈號
     const cityConfigs = [
-      { name: '臺北市', nameX: 150, nameY: 295, l1x: 520, l1y: 295, l2x: 780, l2y: 295 },
-      { name: '新北市', nameX: 150, nameY: 385, l1x: 520, l1y: 385, l2x: 780, l2y: 385 },
-      { name: '桃園市', nameX: 150, nameY: 475, l1x: 520, l1y: 475, l2x: 780, l2y: 475 },
-      { name: '臺中市', nameX: 150, nameY: 565, l1x: 520, l1y: 565, l2x: 780, l2y: 565 },
-      { name: '臺南市', nameX: 150, nameY: 655, l1x: 520, l1y: 655, l2x: 780, l2y: 655 },
-      { name: '高雄市', nameX: 150, nameY: 745, l1x: 520, l1y: 745, l2x: 780, l2y: 745 }
+      { name: '臺北市', nameX: 60, nameY: 250, l1x: 460, l1y: 250, l2x: 720, l2y: 250 },
+      { name: '新北市', nameX: 60, nameY: 340, l1x: 460, l1y: 340, l2x: 720, l2y: 340 },
+      { name: '桃園市', nameX: 60, nameY: 430, l1x: 460, l1y: 430, l2x: 720, l2y: 430 },
+      { name: '臺中市', nameX: 60, nameY: 520, l1x: 460, l1y: 520, l2x: 720, l2y: 520 },
+      { name: '臺南市', nameX: 60, nameY: 610, l1x: 460, l1y: 610, l2x: 720, l2y: 610 },
+      { name: '高雄市', nameX: 60, nameY: 700, l1x: 460, l1y: 700, l2x: 720, l2y: 700 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // 城市名稱
-      ctx.textAlign = 'left';
-      ctx.font = 'bold 36px "NotoSansTC-Bold", "PingFang TC", "Microsoft JhengHei", sans-serif';
-      ctx.fillStyle = '#333333';
-      ctx.fillText(c.name, c.nameX, c.nameY);
+      // 寫入城市名稱
+      image.print(font, c.nameX, c.nameY, c.name);
       
-      // 燈號1
-      ctx.textAlign = 'center';
-      ctx.font = '52px sans-serif';
-      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '❓';
-      ctx.fillText(emoji1, c.l1x, c.l1y);
-      
-      // 燈號2
-      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '❓';
-      ctx.fillText(emoji2, c.l2x, c.l2y);
+      // 寫入燈號
+      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
+      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
+      image.print(font, c.l1x, c.l1y, emoji1);
+      image.print(font, c.l2x, c.l2y, emoji2);
     }
     
-    // ---- 寫入資料時間 ----
-    ctx.textAlign = 'center';
-    ctx.font = '26px "NotoSansTC-Regular", "PingFang TC", "Microsoft JhengHei", sans-serif';
-    ctx.fillStyle = '#999999';
-    ctx.fillText(`資料時間：${dataTimeStr || ''}`, 520, 1070);
+    // 寫入資料時間
+    image.print(font, 400, 1020, `資料時間：${dataTimeStr || ''}`);
     
-    return canvas.toBuffer('image/png');
+    // 輸出圖片 Buffer
+    const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
+    return buffer;
     
   } catch (error) {
     console.error('❌ 生成圖片失敗:', error.message);
@@ -812,7 +784,6 @@ async function precomputeAndCache() {
   const startTime = Date.now();
   
   try {
-    // 預先計算數據，存到快取
     const citiesData = [];
     let globalDataTime = null;
     
