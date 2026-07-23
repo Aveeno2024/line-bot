@@ -602,21 +602,25 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 上傳圖片到 ImgBB
+// ✅ 上傳圖片到 Cloudinary
 // ==========================================
 async function uploadToImgur(imageBuffer) {
   try {
-    // 使用 ImgBB API
-    const IMGBB_API_KEY = process.env.IMGBB_API_KEY;
+    const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+    const API_KEY = process.env.CLOUDINARY_API_KEY;
+    const API_SECRET = process.env.CLOUDINARY_API_SECRET;
     
-    // 如果沒有設定 API Key，嘗試使用公開上傳（每日有限制）
-    const apiKey = IMGBB_API_KEY || 'free';
+    if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
+      console.error('❌ 未設定 Cloudinary 環境變數');
+      return null;
+    }
     
     const formData = new FormData();
-    formData.append('image', imageBuffer.toString('base64'));
+    formData.append('file', imageBuffer.toString('base64'));
+    formData.append('upload_preset', 'ml_default');
     
     const response = await axios.post(
-      `https://api.imgbb.com/1/upload?key=${apiKey}`,
+      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
       formData,
       {
         headers: formData.getHeaders(),
@@ -624,10 +628,9 @@ async function uploadToImgur(imageBuffer) {
       }
     );
     
-    if (response.data && response.data.data) {
+    if (response.data && response.data.secure_url) {
       console.log('✅ 圖片上傳成功');
-      // 回傳 display_url（可直接顯示的圖片網址）
-      return response.data.data.display_url || response.data.data.url;
+      return response.data.secure_url;
     } else {
       console.error('❌ 上傳失敗:', response.data);
       return null;
@@ -679,7 +682,7 @@ async function generatePage1ImageFlex(startOffset = 0) {
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     if (!imageBuffer) return null;
     
-    // 上傳
+    // 上傳到 Cloudinary
     const imageUrl = await uploadToImgur(imageBuffer);
     if (!imageUrl) return null;
     
