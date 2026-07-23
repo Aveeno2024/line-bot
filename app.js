@@ -3,21 +3,22 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const cron = require('node-cron');
+const { createCanvas, loadImage, registerFont } = require('canvas');
+const path = require('path');
+const FormData = require('form-data');
 const app = express();
 app.use(express.json());
 
 // ==========================================
-// 啟用 CORS（允許網站跨域請求）
+// ✅ 註冊中文字體
 // ==========================================
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
+try {
+  registerFont(path.join(__dirname, 'public/fonts/NotoSansTC-Regular.ttf'), { family: 'NotoSansTC' });
+  registerFont(path.join(__dirname, 'public/fonts/NotoSansTC-Bold.ttf'), { family: 'NotoSansTC-Bold' });
+  console.log('✅ 中文字體註冊成功');
+} catch (e) {
+  console.log('⚠️ 中文字體未找到，將使用系統預設字體');
+}
 
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
@@ -25,6 +26,11 @@ app.use((req, res, next) => {
 const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
+
+// ==========================================
+// ✅ 第二張圖（燈號說明）- 固定圖片網址
+// ==========================================
+const PAGE2_IMAGE_URL = 'https://i.imgur.com/EZIxiKO.png';
 
 // GitHub 設定 (可選)
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -44,39 +50,25 @@ let lastCacheTime = null;
 // ==========================================
 // ⭐ 限流機制
 // ==========================================
-
-// 使用者查詢紀錄（用於限流）
 const userLastQueryTime = {};
-
-// 全域限流：每分鐘最多 60 個請求
 const rateLimit = {
-  window: 60 * 1000, // 1 分鐘
+  window: 60 * 1000,
   maxRequests: 60,
   requests: []
 };
 
-// 檢查是否超過全域限流
 function isRateLimited() {
   const now = Date.now();
   rateLimit.requests = rateLimit.requests.filter(time => now - time < rateLimit.window);
-  
-  if (rateLimit.requests.length >= rateLimit.maxRequests) {
-    return true;
-  }
-  
+  if (rateLimit.requests.length >= rateLimit.maxRequests) return true;
   rateLimit.requests.push(now);
   return false;
 }
 
-// 檢查使用者限流（30秒內只能查詢一次）
 function isUserRateLimited(userId) {
   const now = Date.now();
   const lastTime = userLastQueryTime[userId] || 0;
-  
-  if (now - lastTime < 30000) {
-    return true;
-  }
-  
+  if (now - lastTime < 30000) return true;
   userLastQueryTime[userId] = now;
   return false;
 }
@@ -84,53 +76,40 @@ function isUserRateLimited(userId) {
 // ==========================================
 // ⭐ 訊息佇列
 // ==========================================
-
 class MessageQueue {
   constructor() {
     this.queue = [];
     this.isProcessing = false;
     this.delay = 500;
   }
-  
   add(message) {
     this.queue.push(message);
-    if (!this.isProcessing) {
-      this.processQueue();
-    }
+    if (!this.isProcessing) this.processQueue();
   }
-  
   async processQueue() {
     if (this.queue.length === 0) {
       this.isProcessing = false;
       return;
     }
-    
     this.isProcessing = true;
     const { userId, page1, resolve, reject } = this.queue.shift();
-    
     try {
       await pushToUser(userId, page1);
       resolve({ success: true });
     } catch (error) {
       reject(error);
     }
-    
-    setTimeout(() => {
-      this.processQueue();
-    }, this.delay);
+    setTimeout(() => this.processQueue(), this.delay);
   }
-  
   get length() {
     return this.queue.length;
   }
 }
-
 const messageQueue = new MessageQueue();
 
 // ==========================================
 // 推播函數
 // ==========================================
-
 async function pushToUser(userId, page1) {
   try {
     await axios.post('https://api.line.me/v2/bot/message/push', { to: userId, messages: [page1] }, {
@@ -169,15 +148,10 @@ function saveGroups() {
 // GitHub 同步訂閱資料
 // ==========================================
 async function syncToGitHub() {
-  if (!GITHUB_TOKEN || !GITHUB_REPO) {
-    console.log('⚠️ GitHub 未設定，跳過同步');
-    return;
-  }
-  
+  if (!GITHUB_TOKEN || !GITHUB_REPO) return;
   try {
     const content = fs.readFileSync(SUBSCRIBERS_FILE, 'utf8');
     const base64Content = Buffer.from(content).toString('base64');
-    
     let sha = null;
     try {
       const fileRes = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/contents/subscribers.json`, {
@@ -185,7 +159,6 @@ async function syncToGitHub() {
       });
       sha = fileRes.data.sha;
     } catch(e) { }
-    
     await axios.put(`https://api.github.com/repos/${GITHUB_REPO}/contents/subscribers.json`, {
       message: `Update subscribers - ${new Date().toISOString()}`,
       content: base64Content,
@@ -200,24 +173,16 @@ async function syncToGitHub() {
 }
 
 async function loadFromGitHub() {
-  if (!GITHUB_TOKEN || !GITHUB_REPO) {
-    console.log('⚠️ GitHub 未設定，從本地載入');
-    return;
-  }
-  
+  if (!GITHUB_TOKEN || !GITHUB_REPO) return;
   try {
     const res = await axios.get(`https://api.github.com/repos/${GITHUB_REPO}/contents/subscribers.json`, {
       headers: { 'Authorization': `token ${GITHUB_TOKEN}` }
     });
     const content = Buffer.from(res.data.content, 'base64').toString('utf8');
-    const loadedSubscribers = JSON.parse(content);
-    
-    subscribers = loadedSubscribers;
-    
+    subscribers = JSON.parse(content);
     console.log(`📋 從 GitHub 載入 ${subscribers.length} 位訂閱用戶`);
     fs.writeFileSync(SUBSCRIBERS_FILE, JSON.stringify(subscribers, null, 2));
   } catch(e) {
-    console.log('📋 GitHub 無訂閱資料，使用本地檔案');
     try {
       if (fs.existsSync(SUBSCRIBERS_FILE)) {
         subscribers = JSON.parse(fs.readFileSync(SUBSCRIBERS_FILE, 'utf8'));
@@ -252,7 +217,6 @@ const CITIES = [
 // ==========================================
 // SHPI V4 核心計算函數
 // ==========================================
-
 function calcSaturationVaporPressure(temp) {
   return 0.6112 * Math.exp((17.67 * temp) / (temp + 243.5));
 }
@@ -314,7 +278,6 @@ function calculateSHPI(tempOut, humOut) {
 // ==========================================
 // 台灣時間工具函數
 // ==========================================
-
 function getTaiwanTime() {
   const now = new Date();
   return new Date(now.getTime() + 8 * 60 * 60 * 1000);
@@ -339,7 +302,6 @@ function getTaiwanMinute() {
 // ==========================================
 // 中央氣象署 API
 // ==========================================
-
 async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
   console.log(`\n🔍 ===== ${city.displayName} 第${dateOffset+1}天原始數據 ====`);
   console.log(`📡 請求: ${city.displayName} ${dateOffset}天後 ${targetHour}:00`);
@@ -598,42 +560,172 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// 燈號說明對照表
+// ✅ 第一頁圖片生成函數（動態寫入文字）
 // ==========================================
-const LIGHT_DESCRIPTIONS = {
-  "紅燈": {
-    title: "🔴 紅燈：極端警報（Dangerous Impact）",
-    desc: "溫濕度極端，易乾癢、刺痛或脫屑。",
-    suggestions: [
-      "通用：常規保濕不足，需高能修護及封閉性保濕。",
-      "敏弱：減法保養，停用美白等功能性產品，免刺激。"
-    ]
-  },
-  "橘燈": {
-    title: "🟠 橘燈：高壓衝擊（High Impact）",
-    desc: "溫濕度波動大，皮脂膜鬆動，皮膚乾粗暗沉，進出冷氣房易微熱刺痛。",
-    suggestions: [
-      "通用：防冷氣直吹，以修護產品輔助鎖水。",
-      "敏弱：禁用純水噴霧，避免越噴越乾。"
-    ]
-  },
-  "黃燈": {
-    title: "🟡 黃燈：慢性耗竭（Moderate Impact）",
-    desc: "濕度波動，細胞調節頻繁，下午易緊繃或出油。",
-    suggestions: [
-      "通用：避免過度清潔，減少皮脂膜損耗。",
-      "敏弱：暫停去角質與酸類，保留緩衝厚度。"
-    ]
-  },
-  "綠燈": {
-    title: "🟢 綠燈：動態平衡（Low Impact）",
-    desc: "濕度適中，肌膚可維持恆定。",
-    suggestions: [
-      "通用：避免過度保養，暫停厚重脂質，不干擾代謝信號。",
-      "敏弱：若泛紅乾癢，優先檢視其他刺激源。"
-    ]
+async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
+  try {
+    // 載入模板
+    const templatePath = path.join(__dirname, 'public/images/template_page1.png');
+    const image = await loadImage(templatePath);
+    
+    const width = 1040;
+    const height = 1200;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    
+    // 繪製背景
+    ctx.drawImage(image, 0, 0, width, height);
+    
+    // ---- 寫入日期 ----
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 40px "NotoSansTC-Bold", "PingFang TC", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#333333';
+    ctx.fillText(day0Label, 520, 165);
+    ctx.fillText(`預${day1Label}`, 780, 165);
+    
+    // ---- 寫入城市燈號 ----
+    const cityConfigs = [
+      { name: '臺北市', nameX: 150, nameY: 295, l1x: 520, l1y: 295, l2x: 780, l2y: 295 },
+      { name: '新北市', nameX: 150, nameY: 385, l1x: 520, l1y: 385, l2x: 780, l2y: 385 },
+      { name: '桃園市', nameX: 150, nameY: 475, l1x: 520, l1y: 475, l2x: 780, l2y: 475 },
+      { name: '臺中市', nameX: 150, nameY: 565, l1x: 520, l1y: 565, l2x: 780, l2y: 565 },
+      { name: '臺南市', nameX: 150, nameY: 655, l1x: 520, l1y: 655, l2x: 780, l2y: 655 },
+      { name: '高雄市', nameX: 150, nameY: 745, l1x: 520, l1y: 745, l2x: 780, l2y: 745 }
+    ];
+    
+    for (let i = 0; i < cityConfigs.length; i++) {
+      const c = cityConfigs[i];
+      const data = citiesData[i] || {};
+      
+      // 城市名稱
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 36px "NotoSansTC-Bold", "PingFang TC", "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = '#333333';
+      ctx.fillText(c.name, c.nameX, c.nameY);
+      
+      // 燈號1
+      ctx.textAlign = 'center';
+      ctx.font = '52px sans-serif';
+      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '❓';
+      ctx.fillText(emoji1, c.l1x, c.l1y);
+      
+      // 燈號2
+      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '❓';
+      ctx.fillText(emoji2, c.l2x, c.l2y);
+    }
+    
+    // ---- 寫入資料時間 ----
+    ctx.textAlign = 'center';
+    ctx.font = '26px "NotoSansTC-Regular", "PingFang TC", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#999999';
+    ctx.fillText(`資料時間：${dataTimeStr || ''}`, 520, 1070);
+    
+    return canvas.toBuffer('image/png');
+    
+  } catch (error) {
+    console.error('❌ 生成圖片失敗:', error.message);
+    return null;
   }
-};
+}
+
+// ==========================================
+// ✅ 上傳圖片到 Imgur
+// ==========================================
+async function uploadToImgur(imageBuffer) {
+  try {
+    const IMGUR_CLIENT_ID = process.env.IMGUR_CLIENT_ID;
+    if (!IMGUR_CLIENT_ID) {
+      console.error('❌ 未設定 IMGUR_CLIENT_ID 環境變數');
+      return null;
+    }
+    
+    const formData = new FormData();
+    formData.append('image', imageBuffer.toString('base64'));
+    
+    const response = await axios.post('https://api.imgur.com/3/image', formData, {
+      headers: {
+        'Authorization': `Client-ID ${IMGUR_CLIENT_ID}`,
+        ...formData.getHeaders()
+      },
+      timeout: 30000
+    });
+    
+    console.log('✅ 圖片上傳成功');
+    return response.data.data.link;
+    
+  } catch (error) {
+    console.error('❌ 上傳失敗:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+// ==========================================
+// ✅ 產生第一頁圖片訊息
+// ==========================================
+async function generatePage1ImageFlex(startOffset = 0) {
+  try {
+    const citiesData = [];
+    let globalDataTime = null;
+    
+    for (const city of CITIES) {
+      const twoDays = await calculateCityTwoDays(city, startOffset, 14);
+      citiesData.push({
+        day0: twoDays.days[0],
+        day1: twoDays.days[1]
+      });
+      if (!globalDataTime && twoDays.dataTime) {
+        globalDataTime = twoDays.dataTime;
+      }
+    }
+    
+    // 取得日期
+    let day0Label = '日期1';
+    let day1Label = '日期2';
+    if (globalDataTime) {
+      const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
+      const parts = cleanTime.split(' ');
+      if (parts.length > 0) {
+        const dateParts = parts[0].split('-');
+        if (dateParts.length === 3) {
+          day0Label = `${parseInt(dateParts[1])}/${parseInt(dateParts[2])}`;
+          const d = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+          d.setDate(d.getDate() + 1);
+          day1Label = `${d.getMonth()+1}/${d.getDate()}`;
+        }
+      }
+    }
+    
+    // 生成圖片
+    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
+    if (!imageBuffer) return null;
+    
+    // 上傳
+    const imageUrl = await uploadToImgur(imageBuffer);
+    if (!imageUrl) return null;
+    
+    return {
+      type: 'image',
+      originalContentUrl: imageUrl,
+      previewImageUrl: imageUrl
+    };
+    
+  } catch (error) {
+    console.error('❌ 產生圖片訊息失敗:', error.message);
+    return null;
+  }
+}
+
+// ==========================================
+// ✅ 產生第二頁圖片訊息（固定圖片）
+// ==========================================
+function generatePage2ImageFlex() {
+  return {
+    type: 'image',
+    originalContentUrl: PAGE2_IMAGE_URL,
+    previewImageUrl: PAGE2_IMAGE_URL
+  };
+}
 
 // ==========================================
 // 錯誤訊息 Flex Message
@@ -643,332 +735,43 @@ function getErrorFlexMessage() {
   const tomorrow = getDateString(1);
   
   return {
-    type: "flex",
-    altText: "⚠️ 中央氣象署 API 暫時無法連線",
+    type: 'flex',
+    altText: '⚠️ 中央氣象署 API 暫時無法連線',
     contents: {
-      type: "bubble",
-      size: "giga",
+      type: 'bubble',
+      size: 'giga',
       header: {
-        type: "box",
-        layout: "vertical",
+        type: 'box',
+        layout: 'vertical',
         contents: [
-          { type: "text", text: "⚠️ 服務暫時無法使用", weight: "bold", size: "xl", color: "#ffffff", scaling: true }
+          { type: 'text', text: '⚠️ 服務暫時無法使用', weight: 'bold', size: 'xl', color: '#ffffff', scaling: true }
         ],
-        backgroundColor: "#FF6600",
-        paddingAll: "20px"
+        backgroundColor: '#FF6600',
+        paddingAll: '20px'
       },
       body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "md",
+        type: 'box',
+        layout: 'vertical',
+        spacing: 'md',
         contents: [
-          { type: "text", text: "中央氣象署 API 暫時無法連線", size: "lg", weight: "bold", color: "#FF0000", wrap: true, scaling: true },
-          { type: "text", text: "請稍後再試，或聯繫管理員。", size: "md", color: "#666666", wrap: true, scaling: true },
-          { type: "separator", margin: "md" },
-          { type: "text", text: "💡 您可以嘗試：", size: "md", weight: "bold", scaling: true },
-          { type: "text", text: "• 幾分鐘後重新查詢", size: "sm", color: "#666666", scaling: true },
-          { type: "text", text: "• 加入 LINE 好友接收推播", size: "sm", color: "#666666", scaling: true }
+          { type: 'text', text: '中央氣象署 API 暫時無法連線', size: 'lg', weight: 'bold', color: '#FF0000', wrap: true, scaling: true },
+          { type: 'text', text: '請稍後再試，或聯繫管理員。', size: 'md', color: '#666666', wrap: true, scaling: true },
+          { type: 'separator', margin: 'md' },
+          { type: 'text', text: '💡 您可以嘗試：', size: 'md', weight: 'bold', scaling: true },
+          { type: 'text', text: '• 幾分鐘後重新查詢', size: 'sm', color: '#666666', scaling: true },
+          { type: 'text', text: '• 加入 LINE 好友接收推播', size: 'sm', color: '#666666', scaling: true }
         ],
-        paddingAll: "20px"
+        paddingAll: '20px'
       },
       footer: {
-        type: "box",
-        layout: "vertical",
+        type: 'box',
+        layout: 'vertical',
         contents: [
-          { type: "separator" },
-          { type: "text", text: "📊 中央氣象署", size: "xs", color: "#999999", align: "center", scaling: true }
+          { type: 'separator' },
+          { type: 'text', text: '📊 中央氣象署', size: 'xs', color: '#999999', align: 'center', scaling: true }
         ],
-        paddingAll: "12px"
+        paddingAll: '12px'
       }
-    }
-  };
-}
-
-// ==========================================
-// 第一頁：Flex Message（預報表格 + 按鈕）
-// ==========================================
-async function generatePage1Flex(startOffset = 0) {
-  const citiesData = [];
-  let globalDataTime = null;
-  
-  for (const city of CITIES) {
-    const twoDays = await calculateCityTwoDays(city, startOffset, 14);
-    citiesData.push(twoDays);
-    
-    if (!globalDataTime && twoDays.dataTime) {
-      globalDataTime = twoDays.dataTime;
-    }
-  }
-  
-  // ============================================================
-  // ✅ 從 API 的 dataTime 提取日期
-  // ============================================================
-  let day0Label = "日期1";
-  let day1Label = "日期2";
-  
-  if (globalDataTime) {
-    const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
-    const parts = cleanTime.split(' ');
-    if (parts.length > 0) {
-      const dateParts = parts[0].split('-');
-      if (dateParts.length === 3) {
-        const year = parseInt(dateParts[0]);
-        const month = parseInt(dateParts[1]);
-        const day = parseInt(dateParts[2]);
-        day0Label = `${month}/${day}`;
-        
-        const d = new Date(year, month - 1, day);
-        d.setDate(d.getDate() + 1);
-        day1Label = `${d.getMonth()+1}/${d.getDate()}`;
-        
-        console.log(`✅ 從 API 日期提取: ${day0Label} ~ ${day1Label}`);
-      }
-    }
-  } else {
-    const taiwanTime = getTaiwanTime();
-    const year = taiwanTime.getUTCFullYear();
-    const month = taiwanTime.getUTCMonth() + 1;
-    const day = taiwanTime.getUTCDate() + startOffset;
-    day0Label = `${month}/${day}`;
-    
-    const d = new Date(year, month - 1, day);
-    d.setDate(d.getDate() + 1);
-    day1Label = `${d.getMonth()+1}/${d.getDate()}`;
-    
-    console.log(`⚠️ 使用備用日期: ${day0Label} ~ ${day1Label}`);
-  }
-  
-  // ============================================================
-  // ✅ 建立表格標題列
-  // ============================================================
-  const bodyContents = [
-    { type: "box", layout: "horizontal", contents: [
-      { type: "text", text: "城市", weight: "bold", size: "lg", flex: 2, scaling: true },
-      { type: "text", text: day0Label, weight: "bold", size: "lg", flex: 1, align: "center", scaling: true },
-      { type: "text", text: `預${day1Label}`, weight: "bold", size: "lg", flex: 1, align: "center", scaling: true }
-    ]},
-    { type: "separator", margin: "sm" }
-  ];
-  
-  let hasError = false;
-  
-  // ============================================================
-  // ✅ 逐城市填入燈號
-  // ============================================================
-  for (const cityData of citiesData) {
-    const day0 = cityData.days[0];
-    const day1 = cityData.days[1];
-    
-    if (!day0 || !day1) {
-      hasError = true;
-    }
-    
-    const emoji0 = day0 ? day0.light.emoji : "❓";
-    const emoji1 = day1 ? day1.light.emoji : "❓";
-    const color0 = day0 ? day0.light.color : "#999999";
-    const color1 = day1 ? day1.light.color : "#999999";
-    
-    bodyContents.push({
-      type: "box", layout: "horizontal", contents: [
-        { type: "text", text: cityData.city, size: "lg", flex: 2, scaling: true },
-        { type: "text", text: emoji0, size: "xl", flex: 1, align: "center", color: color0, scaling: true },
-        { type: "text", text: emoji1, size: "xl", flex: 1, align: "center", color: color1, scaling: true }
-      ]
-    });
-  }
-  
-  // ============================================================
-  // ✅ 資料時間
-  // ============================================================
-  let dataTimeStr = globalDataTime || new Date().toLocaleString();
-  dataTimeStr = dataTimeStr.replace(/\+08:00/g, '').trim();
-  
-  // ============================================================
-  // ✅ Footer 內容（簡化：只顯示資料時間 + 資料來源 + 按鈕）
-  // ============================================================
-  const footerContents = [
-    { type: "separator" },
-    { type: "text", text: `🕐 ${dataTimeStr}`, size: "xs", color: "#999999", align: "center", scaling: true },
-    { type: "text", text: `📊 資料來源：中央氣象署`, size: "xs", color: "#999999", align: "center", scaling: true }
-  ];
-  
-  if (hasError) {
-    footerContents.splice(2, 0, { 
-      type: "text", 
-      text: "⚠️ 部分城市「❓」暫無資料", 
-      size: "xs", 
-      color: "#FF6600", 
-      align: "center",
-      wrap: true,
-      scaling: true
-    });
-  }
-  
-  // ✅ 按鈕放在 Footer 最下方
-  footerContents.push(
-    { type: "separator", margin: "sm" },
-    { 
-      type: "button", 
-      style: "primary", 
-      height: "sm", 
-      action: { 
-        type: "message", 
-        label: "📋 查看燈號說明及建議", 
-        text: "燈號說明" 
-      }, 
-      color: "#667eea", 
-      margin: "sm" 
-    }
-  );
-  
-  // ============================================================
-  // ✅ 回傳 Flex Message
-  // ============================================================
-  return {
-    page1: {
-      type: "flex",
-      altText: `🌡️💧 皮膚濕度壓力指數 ${day0Label}~${day1Label}`,
-      contents: {
-        type: "bubble",
-        size: "giga",
-        header: {
-          type: "box",
-          layout: "vertical",
-          contents: [
-            { 
-              type: "text", 
-              text: "🌡️💧 皮膚濕度壓力指數", 
-              weight: "bold", 
-              size: "xl", 
-              color: "#ffffff",
-              scaling: true
-            }
-          ],
-          backgroundColor: "#667eea",
-          paddingAll: "20px"
-        },
-        body: {
-          type: "box",
-          layout: "vertical",
-          spacing: "sm",
-          contents: bodyContents,
-          paddingAll: "20px"
-        },
-        footer: {
-          type: "box",
-          layout: "vertical",
-          spacing: "xs",
-          contents: footerContents,
-          paddingAll: "12px"
-        }
-      }
-    }
-  };
-}
-
-// ==========================================
-// 第二頁：燈號說明 + 查詢指令 + 訂閱管理
-// ==========================================
-async function generatePage2Flex(day0Lights = new Set()) {
-  // 如果沒有傳入特定燈號，顯示全部
-  const lightNames = day0Lights.size > 0 ? Array.from(day0Lights) : ["紅燈", "橘燈", "黃燈", "綠燈"];
-  const validLights = lightNames.filter(name => ["綠燈", "黃燈", "橘燈", "紅燈"].includes(name));
-  
-  const bodyContents = [];
-  
-  // 燈號說明標題
-  bodyContents.push({
-    type: "text",
-    text: "📋 燈號說明與保健建議",
-    weight: "bold",
-    size: "md",
-    margin: "sm",
-    scaling: true
-  });
-  
-  for (const lightName of validLights) {
-    const info = LIGHT_DESCRIPTIONS[lightName];
-    if (info) {
-      bodyContents.push({
-        type: "text",
-        text: info.title,
-        weight: "bold",
-        size: "sm",
-        color: {
-          "綠燈": "#00CC00",
-          "黃燈": "#FFD700",
-          "橘燈": "#FF8C00",
-          "紅燈": "#FF0000"
-        }[lightName] || "#666666",
-        margin: "sm",
-        scaling: true
-      });
-      bodyContents.push({
-        type: "text",
-        text: info.desc,
-        size: "sm",
-        color: "#666666",
-        wrap: true,
-        scaling: true
-      });
-      for (const suggestion of info.suggestions) {
-        bodyContents.push({
-          type: "text",
-          text: suggestion,
-          size: "xs",
-          color: "#666666",
-          wrap: true,
-          scaling: true
-        });
-      }
-      if (lightName !== validLights[validLights.length - 1]) {
-        bodyContents.push({ type: "separator", margin: "md" });
-      }
-    }
-  }
-  
-  // ============================================================
-  // ✅ 查詢指令
-  // ============================================================
-  bodyContents.push({ type: "separator", margin: "md" });
-  bodyContents.push({ type: "text", text: "🔍 查詢指令", weight: "bold", size: "md", scaling: true });
-  bodyContents.push({ type: "text", text: "• 輸入「全台」查看六都2天預報", size: "sm", color: "#666666", wrap: true, scaling: true });
-  bodyContents.push({ type: "text", text: "• 輸入「燈號說明」查看本頁面", size: "sm", color: "#666666", wrap: true, scaling: true });
-  
-  // ============================================================
-  // ✅ 訂閱管理
-  // ============================================================
-  bodyContents.push({ type: "separator", margin: "md" });
-  bodyContents.push({ type: "text", text: "🔔 訂閱管理", weight: "bold", size: "md", scaling: true });
-  bodyContents.push({ type: "text", text: "• 輸入「加入訂閱」開啟每日提醒", size: "sm", color: "#666666", wrap: true, scaling: true });
-  bodyContents.push({ type: "text", text: "• 輸入「取消訂閱」關閉每日提醒", size: "sm", color: "#666666", wrap: true, scaling: true });
-  
-  // ============================================================
-  // ✅ 回傳 Flex Message（Footer 已移除）
-  // ============================================================
-  return {
-    type: "flex",
-    altText: "📋 燈號說明與保健建議",
-    contents: {
-      type: "bubble",
-      size: "giga",
-      header: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          { type: "text", text: "📋 燈號說明與保健建議", weight: "bold", size: "xl", color: "#ffffff", scaling: true }
-        ],
-        backgroundColor: "#667eea",
-        paddingAll: "20px"
-      },
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "sm",
-        contents: bodyContents,
-        paddingAll: "20px"
-      }
-      // ✅ Footer 已完全移除
     }
   };
 }
@@ -976,13 +779,12 @@ async function generatePage2Flex(day0Lights = new Set()) {
 // ==========================================
 // 回覆函數
 // ==========================================
-
-async function replyFlexMessage(replyToken, flexMessage) {
+async function replyMessage(replyToken, message) {
   try {
-    await axios.post('https://api.line.me/v2/bot/message/reply', { replyToken, messages: [flexMessage] }, {
+    await axios.post('https://api.line.me/v2/bot/message/reply', { replyToken, messages: [message] }, {
       headers: { 'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}` }
     });
-    console.log('✅ Flex Message 回復成功');
+    console.log('✅ 訊息回復成功');
   } catch (err) {
     console.error('❌ 回復失敗:', err.response?.data || err.message);
   }
@@ -1002,7 +804,6 @@ async function replyTextMessage(replyToken, text) {
 // ==========================================
 // 快取管理函數
 // ==========================================
-
 async function precomputeAndCache() {
   const startOffset = calculateStartOffset();
   
@@ -1011,9 +812,55 @@ async function precomputeAndCache() {
   const startTime = Date.now();
   
   try {
-    const page1Result = await generatePage1Flex(startOffset);
-    const page1 = page1Result.page1;
-    const page2 = await generatePage2Flex(new Set());
+    // 預先計算數據，存到快取
+    const citiesData = [];
+    let globalDataTime = null;
+    
+    for (const city of CITIES) {
+      const twoDays = await calculateCityTwoDays(city, startOffset, 14);
+      citiesData.push({
+        name: city.displayName,
+        day0: twoDays.days[0],
+        day1: twoDays.days[1]
+      });
+      if (!globalDataTime && twoDays.dataTime) {
+        globalDataTime = twoDays.dataTime;
+      }
+    }
+    
+    // 取得日期
+    let day0Label = '日期1';
+    let day1Label = '日期2';
+    if (globalDataTime) {
+      const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
+      const parts = cleanTime.split(' ');
+      if (parts.length > 0) {
+        const dateParts = parts[0].split('-');
+        if (dateParts.length === 3) {
+          day0Label = `${parseInt(dateParts[1])}/${parseInt(dateParts[2])}`;
+          const d = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+          d.setDate(d.getDate() + 1);
+          day1Label = `${d.getMonth()+1}/${d.getDate()}`;
+        }
+      }
+    }
+    
+    // 生成並上傳第一頁圖片
+    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
+    let page1 = null;
+    if (imageBuffer) {
+      const imageUrl = await uploadToImgur(imageBuffer);
+      if (imageUrl) {
+        page1 = {
+          type: 'image',
+          originalContentUrl: imageUrl,
+          previewImageUrl: imageUrl
+        };
+      }
+    }
+    
+    // 第二頁固定圖片
+    const page2 = generatePage2ImageFlex();
     
     cachedForecast = { page1, page2 };
     lastCacheTime = new Date();
@@ -1069,7 +916,6 @@ async function getCachedForecast() {
 // ==========================================
 // 每日發布任務
 // ==========================================
-
 async function dailyPublishTask() {
   console.log(`\n📅 ===== 每日發布任務 ${new Date().toLocaleString()} =====`);
   
@@ -1142,9 +988,7 @@ app.post('/webhook', async (req, res) => {
       
       console.log(`📱 來源: ${sourceType}, ID: ${sourceId}`);
       
-      // ============================================================
       // 加入群組事件
-      // ============================================================
       if (event.type === 'join') {
         const groupId = event.source?.groupId;
         if (groupId && !groups.includes(groupId)) {
@@ -1163,9 +1007,7 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // ============================================================
       // 追蹤事件
-      // ============================================================
       if (event.type === 'follow') {
         if (!subscribers.includes(userId)) {
           subscribers.push(userId);
@@ -1174,18 +1016,16 @@ app.post('/webhook', async (req, res) => {
           
           const cache = await getCachedForecast();
           if (cache && cache.page1) {
-            await replyFlexMessage(replyToken, cache.page1);
+            await replyMessage(replyToken, cache.page1);
           } else {
             const errorMsg = getErrorFlexMessage();
-            await replyFlexMessage(replyToken, errorMsg);
+            await replyMessage(replyToken, errorMsg);
           }
         }
         continue;
       }
       
-      // ============================================================
       // 取消追蹤事件
-      // ============================================================
       if (event.type === 'unfollow') {
         const idx = subscribers.indexOf(userId);
         if (idx !== -1) {
@@ -1196,49 +1036,38 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // ============================================================
       // 訊息事件
-      // ============================================================
       if (event.type === 'message' && event.message.type === 'text') {
         const input = event.message.text.trim();
         console.log(`📱 輸入: "${input}"`);
         
-        // ============================================================
-        // ⭐ 全域限流檢查
-        // ============================================================
+        // 全域限流檢查
         if (isRateLimited()) {
           console.log(`⚠️ 全域限流觸發，拒絕請求`);
           await replyTextMessage(replyToken, '⚠️ 系統忙碌中，請稍後再試。');
           continue;
         }
         
-        // ============================================================
-        // ⭐ 燈號說明（點擊按鈕後觸發）- 不受使用者限流限制
-        // 移到限流檢查之前
-        // ============================================================
+        // ⭐ 燈號說明 - 不受使用者限流限制
         if (input === '燈號說明' || input === '說明') {
           const cache = await getCachedForecast();
           if (cache && cache.page2) {
-            await replyFlexMessage(replyToken, cache.page2);
+            await replyMessage(replyToken, cache.page2);
           } else {
-            const page2 = await generatePage2Flex(new Set());
-            await replyFlexMessage(replyToken, page2);
+            const imageMsg = generatePage2ImageFlex();
+            await replyMessage(replyToken, imageMsg);
           }
-          continue;  // ✅ 跳過後續限流檢查
+          continue;
         }
         
-        // ============================================================
-        // ⭐ 使用者限流檢查（排除「燈號說明」和「說明」）
-        // ============================================================
+        // 使用者限流檢查
         if (isUserRateLimited(sourceId)) {
           console.log(`⚠️ 使用者限流觸發: ${sourceId}`);
           await replyTextMessage(replyToken, '⚠️ 請稍後再查詢，30秒內只能查詢一次');
           continue;
         }
         
-        // ============================================================
         // 取消訂閱
-        // ============================================================
         if (input === '取消訂閱') {
           const idx = subscribers.indexOf(userId);
           if (idx !== -1) {
@@ -1251,9 +1080,7 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // ============================================================
         // 加入訂閱
-        // ============================================================
         if (input === '加入訂閱') {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
@@ -1265,24 +1092,27 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // ============================================================
-        // ⭐ 全台查詢（群組直接回應）
-        // ============================================================
+        // ⭐ 全台查詢（回覆圖片）
         if (input === '全台' || input === 'ALL') {
           const cache = await getCachedForecast();
           
           if (cache && cache.page1) {
-            await replyFlexMessage(replyToken, cache.page1);
+            await replyMessage(replyToken, cache.page1);
           } else {
-            const errorMsg = getErrorFlexMessage();
-            await replyFlexMessage(replyToken, errorMsg);
+            // 即時生成
+            const startOffset = calculateStartOffset();
+            const imageMsg = await generatePage1ImageFlex(startOffset);
+            if (imageMsg) {
+              await replyMessage(replyToken, imageMsg);
+            } else {
+              const errorMsg = getErrorFlexMessage();
+              await replyMessage(replyToken, errorMsg);
+            }
           }
           continue;
         }
         
-        // ============================================================
-        // ⭐ 群組預設回應（非指令訊息）
-        // ============================================================
+        // 群組預設回應
         if (sourceType === 'group') {
           await replyTextMessage(replyToken, 
             `📊 查詢六都皮膚濕度壓力指數\n\n` +
@@ -1291,15 +1121,13 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // ============================================================
         // 個人用戶預設回應
-        // ============================================================
         const cache = await getCachedForecast();
         if (cache && cache.page1) {
-          await replyFlexMessage(replyToken, cache.page1);
+          await replyMessage(replyToken, cache.page1);
         } else {
           const errorMsg = getErrorFlexMessage();
-          await replyFlexMessage(replyToken, errorMsg);
+          await replyMessage(replyToken, errorMsg);
         }
       }
     }
@@ -1311,7 +1139,6 @@ app.post('/webhook', async (req, res) => {
 // ==========================================
 // 每日推播檢查機制（每分鐘檢查）
 // ==========================================
-
 let lastPublishDate = null;
 
 function checkAndPublish() {
@@ -1336,9 +1163,8 @@ setInterval(() => {
 console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
 
 // ==========================================
-// ⭐ 定時預計算任務（僅 06:30 主要）
+// ⭐ 定時預計算任務（06:30）
 // ==========================================
-
 cron.schedule('30 6 * * *', () => {
   console.log(`\n⏰ [06:30] 預計算 - 抓取當天 14:00 預報，確保 7:00 推播使用最新資料`);
   precomputeAndCache();
