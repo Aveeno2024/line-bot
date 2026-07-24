@@ -626,32 +626,28 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 上傳圖片到 Cloudinary
+// ✅ 上傳圖片到 Cloudinary（使用 Upload Preset）
 // ==========================================
 async function uploadToCloudinary(imageBuffer) {
   try {
     const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
-    const API_KEY = process.env.CLOUDINARY_API_KEY;
-    const API_SECRET = process.env.CLOUDINARY_API_SECRET;
+    const UPLOAD_PRESET = process.env.CLOUDINARY_UPLOAD_PRESET || 'my_preset';
     
-    if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
-      console.error('❌ 未設定 Cloudinary 環境變數');
+    if (!CLOUD_NAME) {
+      console.error('❌ 未設定 CLOUDINARY_CLOUD_NAME 環境變數');
       return null;
     }
     
     const formData = new FormData();
     formData.append('file', imageBuffer.toString('base64'));
+    formData.append('upload_preset', UPLOAD_PRESET);
     
-    console.log('📤 上傳圖片到 Cloudinary...');
+    console.log(`📤 上傳圖片到 Cloudinary (${CLOUD_NAME})...`);
     
     const response = await axios.post(
       `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
       formData,
       {
-        params: {
-          api_key: API_KEY,
-          api_secret: API_SECRET
-        },
         headers: formData.getHeaders(),
         timeout: 30000
       }
