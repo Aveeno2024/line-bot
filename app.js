@@ -591,24 +591,24 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
     // ==========================================
-    // 1. ✅ 寫入日期（與「城市」標題平行，往右移）
+    // 1. ✅ 寫入日期（與「城市」標題平行）
     // ==========================================
-    // 「城市」標題位置約在 (60, 210)
-    // 7/24 放在 x=380, y=210 (與城市標題同一水平)
-    // 7/25 放在 x=600, y=210 (往右移，減少右側空白)
-    image.print(font, 380, 210, day0Label);
-    image.print(font, 600, 210, day1Label);
-    console.log(`📅 日期寫入: ${day0Label} @ (380,210) | ${day1Label} @ (600,210)`);
+    // 第一個日期 7/24 中間點 X=600
+    // 第二個日期 7/25 中間點 X=950
+    // Y 與城市標題平行 (假設 Y=210)
+    image.print(font, 600, 210, day0Label);
+    image.print(font, 950, 210, day1Label);
+    console.log(`📅 日期寫入: ${day0Label} @ (600,210) | ${day1Label} @ (950,210)`);
     
     // ==========================================
     // 2. ✅ 燈號顏色對照
     // ==========================================
     const LIGHT_COLORS = {
-      '🟢': { r: 0, g: 204, b: 0 },     // 綠
-      '🟡': { r: 255, g: 215, b: 0 },   // 黃
-      '🟠': { r: 255, g: 140, b: 0 },   // 橘
-      '🔴': { r: 255, g: 0, b: 0 },     // 紅
-      '?': { r: 200, g: 200, b: 200 }   // 無資料 (灰色)
+      '🟢': { r: 0, g: 204, b: 0 },
+      '🟡': { r: 255, g: 215, b: 0 },
+      '🟠': { r: 255, g: 140, b: 0 },
+      '🔴': { r: 255, g: 0, b: 0 },
+      '?': { r: 200, g: 200, b: 200 }
     };
     
     // ==========================================
@@ -638,49 +638,45 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     }
     
     // ==========================================
-    // 4. ✅ 城市燈號配置 (1020x1200 專用)
+    // 4. ✅ 城市燈號配置 - 精確座標
     // ==========================================
-    // 城市名稱在 x=60，燈號圓心在 x=380 (7/24) 和 x=600 (7/25)
-    // 每個城市間距約 95px，與城市名稱對齊
+    // 7/24 燈號 X=600, 7/25 燈號 X=950
+    // Y 座標與各城市名稱對齊
     const cityConfigs = [
-      { name: '台北市', l1x: 380, l1y: 310, l2x: 600, l2y: 310 },
-      { name: '新北市', l1x: 380, l1y: 405, l2x: 600, l2y: 405 },
-      { name: '桃園市', l1x: 380, l1y: 500, l2x: 600, l2y: 500 },
-      { name: '台中市', l1x: 380, l1y: 595, l2x: 600, l2y: 595 },
-      { name: '台南市', l1x: 380, l1y: 690, l2x: 600, l2y: 690 },
-      { name: '高雄市', l1x: 380, l1y: 785, l2x: 600, l2y: 785 }
+      { name: '台北市', l1x: 600, l1y: 354, l2x: 950, l2y: 354 },
+      { name: '新北市', l1x: 600, l1y: 466, l2x: 950, l2y: 466 },
+      { name: '桃園市', l1x: 600, l1y: 584, l2x: 950, l2y: 584 },
+      { name: '台中市', l1x: 600, l1y: 697, l2x: 950, l2y: 697 },
+      { name: '台南市', l1x: 600, l1y: 815, l2x: 950, l2y: 815 },
+      { name: '高雄市', l1x: 600, l1y: 932, l2x: 950, l2y: 932 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // 取得燈號 Emoji
       const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
       const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
       
-      // 畫圓形燈號 (半徑 32px)
       drawLightCircle(image, c.l1x, c.l1y, emoji1, 32);
       drawLightCircle(image, c.l2x, c.l2y, emoji2, 32);
       
-      console.log(`🔍 ${c.name}: 燈號寫入 -> ${emoji1} | ${emoji2}`);
+      console.log(`🔍 ${c.name}: 燈號寫入 -> ${emoji1} @ (${c.l1x},${c.l1y}) | ${emoji2} @ (${c.l2x},${c.l2y})`);
     }
     
     // ==========================================
-    // 5. ✅ 寫入資料時間（與「資料時間」標題對齊）
+    // 5. ✅ 寫入資料時間 (X=305, Y=1101)
     // ==========================================
-    // 「資料時間」標題約在 (60, 1000)
-    // 實際時間放在 x=380, y=1000 (與標題水平對齊)
     const displayTime = dataTimeStr || '2026-07-24 14:00:00';
     // 先塗白背景
-    image.scan(350, 980, 500, 70, function(x, y, idx) {
+    image.scan(280, 1080, 550, 70, function(x, y, idx) {
       this.bitmap.data[idx] = 255;
       this.bitmap.data[idx + 1] = 255;
       this.bitmap.data[idx + 2] = 255;
       this.bitmap.data[idx + 3] = 255;
     });
-    image.print(font, 380, 1000, displayTime);
-    console.log(`🕐 資料時間寫入: ${displayTime} @ (380,1000)`);
+    image.print(font, 305, 1101, displayTime);
+    console.log(`🕐 資料時間寫入: ${displayTime} @ (305,1101)`);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     console.log(`✅ 圖片生成完成 (1020x1200)`);
