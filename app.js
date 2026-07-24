@@ -626,7 +626,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 上傳圖片到 Cloudinary（使用 Upload Preset）
+// ✅ 上傳圖片到 Cloudinary（壓縮後上傳）
 // ==========================================
 async function uploadToCloudinary(imageBuffer) {
   try {
@@ -638,8 +638,19 @@ async function uploadToCloudinary(imageBuffer) {
       return null;
     }
     
+    if (!UPLOAD_PRESET) {
+      console.error('❌ 未設定 CLOUDINARY_UPLOAD_PRESET 環境變數');
+      return null;
+    }
+    
+    // ✅ 壓縮圖片（縮小到 800px 寬，品質 70%）
+    const image = await Jimp.read(imageBuffer);
+    image.resize(800, Jimp.AUTO);
+    image.quality(70);
+    const compressedBuffer = await image.getBufferAsync(Jimp.MIME_JPEG);
+    
     const formData = new FormData();
-    formData.append('file', imageBuffer.toString('base64'));
+    formData.append('file', compressedBuffer.toString('base64'));
     formData.append('upload_preset', UPLOAD_PRESET);
     
     console.log(`📤 上傳圖片到 Cloudinary (${CLOUD_NAME})...`);
@@ -715,7 +726,7 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 上傳到 Cloudinary
+    // ✅ 上傳到 Cloudinary（會自動壓縮）
     const imageUrl = await uploadToCloudinary(imageBuffer);
     if (imageUrl) {
       return {
@@ -875,7 +886,7 @@ async function precomputeAndCache() {
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     let page1 = null;
     if (imageBuffer) {
-      // 上傳到 Cloudinary
+      // 上傳到 Cloudinary（會自動壓縮）
       const imageUrl = await uploadToCloudinary(imageBuffer);
       if (imageUrl) {
         page1 = {
