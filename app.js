@@ -576,47 +576,110 @@ function getLightText(emoji) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片
+// ✅ 使用 Jimp 生成第一頁圖片（畫圓形燈號）- 1020x1200 專用
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
-    // 載入模板
+    console.log(`\n📊 開始生成圖片...`);
+    console.log(`📅 日期: ${day0Label} | ${day1Label}`);
+    console.log(`🕐 資料時間: ${dataTimeStr}`);
+    
+    // 載入模板 (1020 x 1200)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // 縮小圖片（避免檔案過大）
-    image.resize(600, Jimp.AUTO);
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
-    const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
+    // ==========================================
+    // 1. ✅ 寫入日期（與「城市」標題平行）
+    // ==========================================
+    // 第一個日期 7/24 中間點 X=600
+    // 第二個日期 7/25 中間點 X=950
+    // Y 與城市標題平行 (假設 Y=210)
+    image.print(font, 600, 210, day0Label);
+    image.print(font, 950, 210, day1Label);
+    console.log(`📅 日期寫入: ${day0Label} @ (600,210) | ${day1Label} @ (950,210)`);
     
-    // 寫入日期
-    image.print(font, 180, 85, day0Label);
-    image.print(font, 330, 85, day1Label);
+    // ==========================================
+    // 2. ✅ 燈號顏色對照
+    // ==========================================
+    const LIGHT_COLORS = {
+      '🟢': { r: 0, g: 204, b: 0 },
+      '🟡': { r: 255, g: 215, b: 0 },
+      '🟠': { r: 255, g: 140, b: 0 },
+      '🔴': { r: 255, g: 0, b: 0 },
+      '?': { r: 200, g: 200, b: 200 }
+    };
     
-    // 寫入城市燈號
+    // ==========================================
+    // 3. ✅ 畫圓形燈號的輔助函數
+    // ==========================================
+    function drawLightCircle(image, x, y, emoji, radius = 32) {
+      const color = LIGHT_COLORS[emoji] || LIGHT_COLORS['?'];
+      // 先塗白背景（清除原本的 ??）
+      image.scan(x - radius - 10, y - radius - 10, radius * 2 + 20, radius * 2 + 20, function(px, py, idx) {
+        this.bitmap.data[idx] = 255;
+        this.bitmap.data[idx + 1] = 255;
+        this.bitmap.data[idx + 2] = 255;
+        this.bitmap.data[idx + 3] = 255;
+      });
+      // 畫圓形燈號
+      image.scan(x - radius, y - radius, radius * 2, radius * 2, function(px, py, idx) {
+        const dx = px - x;
+        const dy = py - y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= radius) {
+          this.bitmap.data[idx] = color.r;
+          this.bitmap.data[idx + 1] = color.g;
+          this.bitmap.data[idx + 2] = color.b;
+          this.bitmap.data[idx + 3] = 255;
+        }
+      });
+    }
+    
+    // ==========================================
+    // 4. ✅ 城市燈號配置 - 精確座標
+    // ==========================================
+    // 7/24 燈號 X=600, 7/25 燈號 X=950
+    // Y 座標與各城市名稱對齊
     const cityConfigs = [
-      { name: '台北市', nameX: 15, nameY: 160, l1x: 190, l1y: 160, l2x: 330, l2y: 160 },
-      { name: '新北市', nameX: 15, nameY: 205, l1x: 190, l1y: 205, l2x: 330, l2y: 205 },
-      { name: '桃園市', nameX: 15, nameY: 250, l1x: 190, l1y: 250, l2x: 330, l2y: 250 },
-      { name: '台中市', nameX: 15, nameY: 295, l1x: 190, l1y: 295, l2x: 330, l2y: 295 },
-      { name: '台南市', nameX: 15, nameY: 340, l1x: 190, l1y: 340, l2x: 330, l2y: 340 },
-      { name: '高雄市', nameX: 15, nameY: 385, l1x: 190, l1y: 385, l2x: 330, l2y: 385 }
+      { name: '台北市', l1x: 600, l1y: 354, l2x: 950, l2y: 354 },
+      { name: '新北市', l1x: 600, l1y: 466, l2x: 950, l2y: 466 },
+      { name: '桃園市', l1x: 600, l1y: 584, l2x: 950, l2y: 584 },
+      { name: '台中市', l1x: 600, l1y: 697, l2x: 950, l2y: 697 },
+      { name: '台南市', l1x: 600, l1y: 815, l2x: 950, l2y: 815 },
+      { name: '高雄市', l1x: 600, l1y: 932, l2x: 950, l2y: 932 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      const text1 = data.day0 && data.day0.light ? getLightText(data.day0.light.emoji) : '?';
-      const text2 = data.day1 && data.day1.light ? getLightText(data.day1.light.emoji) : '?';
-      image.print(font, c.l1x, c.l1y, text1);
-      image.print(font, c.l2x, c.l2y, text2);
+      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
+      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
+      
+      drawLightCircle(image, c.l1x, c.l1y, emoji1, 32);
+      drawLightCircle(image, c.l2x, c.l2y, emoji2, 32);
+      
+      console.log(`🔍 ${c.name}: 燈號寫入 -> ${emoji1} @ (${c.l1x},${c.l1y}) | ${emoji2} @ (${c.l2x},${c.l2y})`);
     }
     
-    // 寫入資料時間
-    image.print(font, 140, 540, `資料時間：${dataTimeStr || ''}`);
+    // ==========================================
+    // 5. ✅ 寫入資料時間 (X=305, Y=1101)
+    // ==========================================
+    const displayTime = dataTimeStr || '2026-07-24 14:00:00';
+    // 先塗白背景
+    image.scan(280, 1080, 550, 70, function(x, y, idx) {
+      this.bitmap.data[idx] = 255;
+      this.bitmap.data[idx + 1] = 255;
+      this.bitmap.data[idx + 2] = 255;
+      this.bitmap.data[idx + 3] = 255;
+    });
+    image.print(font, 305, 1101, displayTime);
+    console.log(`🕐 資料時間寫入: ${displayTime} @ (305,1101)`);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
+    console.log(`✅ 圖片生成完成 (1020x1200)`);
     return buffer;
     
   } catch (error) {
@@ -624,7 +687,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
@@ -645,17 +707,41 @@ async function generatePage1ImageFlex(startOffset = 0) {
       }
     }
     
-    // 取得日期
-    let day0Label = '日期1';
-    let day1Label = '日期2';
-    if (globalDataTime) {
+    // ✅ 確保 globalDataTime 有值，並格式化為純日期時間
+    if (!globalDataTime) {
+      const now = new Date();
+      const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
+      globalDataTime = dateStr;
+      console.log(`⚠️ 使用備用時間: ${globalDataTime}`);
+    } else {
+      // ✅ 移除 +08:00 時區標示，只保留日期時間
       const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
       const parts = cleanTime.split(' ');
       if (parts.length > 0) {
         const dateParts = parts[0].split('-');
         if (dateParts.length === 3) {
-          day0Label = `${parseInt(dateParts[1])}/${parseInt(dateParts[2])}`;
-          const d = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+          const year = dateParts[0];
+          const month = dateParts[1];
+          const day = dateParts[2];
+          const time = parts[1] || '14:00:00';
+          // ✅ 只顯示 "2026-07-24 14:00:00"，不加中文
+          globalDataTime = `${year}-${month}-${day} ${time}`;
+        }
+      }
+    }
+    
+    // 取得日期
+    let day0Label = '日期1';
+    let day1Label = '日期2';
+    if (globalDataTime) {
+      const parts = globalDataTime.split(' ');
+      if (parts.length > 0) {
+        const dateParts = parts[0].split('-');
+        if (dateParts.length === 3) {
+          const month = parseInt(dateParts[1]);
+          const day = parseInt(dateParts[2]);
+          day0Label = `${month}/${day}`;
+          const d = new Date(parseInt(dateParts[0]), month - 1, day);
           d.setDate(d.getDate() + 1);
           day1Label = `${d.getMonth()+1}/${d.getDate()}`;
         }
@@ -663,7 +749,7 @@ async function generatePage1ImageFlex(startOffset = 0) {
     }
     
     // 生成圖片
-    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
+    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime);
     if (!imageBuffer) {
       return {
         type: 'image',
@@ -672,10 +758,10 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 儲存到 /tmp 目錄（Render 可寫入）
+    // ✅ 儲存到 /tmp 目錄
     const filename = `current_page1_${Date.now()}.png`;
     const outputPath = path.join('/tmp', filename);
-    await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
+    fs.writeFileSync(outputPath, imageBuffer);
     console.log(`✅ 圖片已儲存到 /tmp/${filename}`);
     
     return {
@@ -829,7 +915,7 @@ async function precomputeAndCache() {
     if (imageBuffer) {
       const filename = `current_page1_${Date.now()}.png`;
       const outputPath = path.join('/tmp', filename);
-      await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
+      fs.writeFileSync(outputPath, imageBuffer);
       console.log(`✅ 快取圖片已儲存到 /tmp/${filename}`);
       
       page1 = {
