@@ -626,27 +626,40 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 上傳圖片到 ImgBB（免費，不需 API Key）
+// ✅ 上傳圖片到 Cloudinary
 // ==========================================
-async function uploadToImgbb(imageBuffer) {
+async function uploadToCloudinary(imageBuffer) {
   try {
-    const formData = new FormData();
-    formData.append('image', imageBuffer.toString('base64'));
+    const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+    const API_KEY = process.env.CLOUDINARY_API_KEY;
+    const API_SECRET = process.env.CLOUDINARY_API_SECRET;
     
-    console.log('📤 上傳圖片到 ImgBB...');
+    if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
+      console.error('❌ 未設定 Cloudinary 環境變數');
+      return null;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', imageBuffer.toString('base64'));
+    
+    console.log('📤 上傳圖片到 Cloudinary...');
     
     const response = await axios.post(
-      'https://api.imgbb.com/1/upload?key=free',
+      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
       formData,
       {
+        params: {
+          api_key: API_KEY,
+          api_secret: API_SECRET
+        },
         headers: formData.getHeaders(),
         timeout: 30000
       }
     );
     
-    if (response.data && response.data.data) {
+    if (response.data && response.data.secure_url) {
       console.log('✅ 圖片上傳成功');
-      return response.data.data.display_url || response.data.data.url;
+      return response.data.secure_url;
     } else {
       console.error('❌ 上傳失敗:', response.data);
       return null;
@@ -659,7 +672,7 @@ async function uploadToImgbb(imageBuffer) {
 }
 
 // ==========================================
-// ✅ 產生第一頁圖片訊息（使用 ImgBB 上傳）
+// ✅ 產生第一頁圖片訊息（使用 Cloudinary 上傳）
 // ==========================================
 async function generatePage1ImageFlex(startOffset = 0) {
   try {
@@ -706,8 +719,8 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 上傳到 ImgBB
-    const imageUrl = await uploadToImgbb(imageBuffer);
+    // ✅ 上傳到 Cloudinary
+    const imageUrl = await uploadToCloudinary(imageBuffer);
     if (imageUrl) {
       return {
         type: 'image',
@@ -866,8 +879,8 @@ async function precomputeAndCache() {
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     let page1 = null;
     if (imageBuffer) {
-      // 上傳到 ImgBB
-      const imageUrl = await uploadToImgbb(imageBuffer);
+      // 上傳到 Cloudinary
+      const imageUrl = await uploadToCloudinary(imageBuffer);
       if (imageUrl) {
         page1 = {
           type: 'image',
