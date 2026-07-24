@@ -576,7 +576,7 @@ function getLightText(emoji) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（Emoji 燈號）
+// ✅ 使用 Jimp 生成第一頁圖片
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -588,7 +588,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // ✅ 使用 64px 字體（Emoji 需要大字體才清晰）
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
     // ✅ 寫入日期（數字）
@@ -642,7 +641,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       this.bitmap.data[idx + 2] = 255;
       this.bitmap.data[idx + 3] = 255;
     });
-    // ✅ 只寫日期時間
+    // 只寫日期時間
     image.print(font, 370, 1120, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
@@ -652,7 +651,8 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     console.error('❌ 生成圖片失敗:', error.message);
     return null;
   }
-}F
+}
+
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
@@ -745,6 +745,7 @@ async function generatePage1ImageFlex(startOffset = 0) {
     };
   }
 }
+
 // ==========================================
 // ✅ 產生第二頁圖片訊息（固定圖片）
 // ==========================================
