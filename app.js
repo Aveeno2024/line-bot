@@ -576,7 +576,7 @@ function getLightText(emoji) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片
+// ✅ 使用 Jimp 生成第一頁圖片（新模板座標）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -590,36 +590,37 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
-    // ✅ 寫入日期（數字）
-    image.print(font, 350, 170, day0Label);
-    image.print(font, 620, 170, day1Label);
+    // ✅ 寫入日期（新座標）
+    // 日期1: (550, 205)
+    image.print(font, 550, 205, day0Label);
+    // 日期2: (850, 205)
+    image.print(font, 850, 205, day1Label);
     
-    // ✅ 寫入城市燈號（Emoji）
+    // ✅ 寫入城市燈號（新座標）
     const cityConfigs = [
-      { name: '台北市', nameX: 50, nameY: 320, l1x: 370, l1y: 320, l2x: 640, l2y: 320 },
-      { name: '新北市', nameX: 50, nameY: 415, l1x: 370, l1y: 415, l2x: 640, l2y: 415 },
-      { name: '桃園市', nameX: 50, nameY: 510, l1x: 370, l1y: 510, l2x: 640, l2y: 510 },
-      { name: '台中市', nameX: 50, nameY: 605, l1x: 370, l1y: 605, l2x: 640, l2y: 605 },
-      { name: '台南市', nameX: 50, nameY: 700, l1x: 370, l1y: 700, l2x: 640, l2y: 700 },
-      { name: '高雄市', nameX: 50, nameY: 795, l1x: 370, l1y: 795, l2x: 640, l2y: 795 }
+      { name: '台北市', l1x: 550, l1y: 295, l2x: 850, l2y: 295 },
+      { name: '新北市', l1x: 550, l1y: 392, l2x: 850, l2y: 392 },
+      { name: '桃園市', l1x: 550, l1y: 489, l2x: 850, l2y: 489 },
+      { name: '台中市', l1x: 550, l1y: 586, l2x: 850, l2y: 586 },
+      { name: '台南市', l1x: 550, l1y: 683, l2x: 850, l2y: 683 },
+      { name: '高雄市', l1x: 550, l1y: 780, l2x: 850, l2y: 780 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ 寫入 Emoji 燈號
       const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
       const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
       
       // 先塗白燈號區域
-      image.scan(c.l1x - 40, c.l1y - 30, 80, 60, function(x, y, idx) {
+      image.scan(c.l1x - 50, c.l1y - 40, 100, 80, function(x, y, idx) {
         this.bitmap.data[idx] = 255;
         this.bitmap.data[idx + 1] = 255;
         this.bitmap.data[idx + 2] = 255;
         this.bitmap.data[idx + 3] = 255;
       });
-      image.scan(c.l2x - 40, c.l2y - 30, 80, 60, function(x, y, idx) {
+      image.scan(c.l2x - 50, c.l2y - 40, 100, 80, function(x, y, idx) {
         this.bitmap.data[idx] = 255;
         this.bitmap.data[idx + 1] = 255;
         this.bitmap.data[idx + 2] = 255;
@@ -632,17 +633,16 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       console.log(`🔍 ${c.name}: 燈號寫入 -> ${emoji1} | ${emoji2}`);
     }
     
-    // ✅ 寫入資料時間（只寫日期時間，不寫「資料時間」）
+    // ✅ 寫入資料時間（新座標）
+    // 資料時間: (692, 892)
     const displayTime = dataTimeStr || '2026-07-24 14:00:00';
-    // 先塗白
-    image.scan(350, 1100, 500, 60, function(x, y, idx) {
+    image.scan(692 - 200, 892 - 40, 400, 80, function(x, y, idx) {
       this.bitmap.data[idx] = 255;
       this.bitmap.data[idx + 1] = 255;
       this.bitmap.data[idx + 2] = 255;
       this.bitmap.data[idx + 3] = 255;
     });
-    // 只寫日期時間
-    image.print(font, 370, 1120, displayTime);
+    image.print(font, 692, 892, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return buffer;
@@ -652,7 +652,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
