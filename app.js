@@ -646,7 +646,7 @@ function drawColoredCircle(image, x, y, color, radius = 28) {
   });
 }
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（更新座標版 v3）
+// ✅ 使用 Jimp 生成第一頁圖片（更新座標版 v6）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -665,14 +665,14 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     image.print(font, 510, 185, day0Label);
     image.print(font, 800, 185, day1Label);
     
-    // ✅ 城市燈號位置（X +10, Y +5）
+    // ✅ 城市燈號位置（X +15, Y 不變 = v3 的 Y）
     const cityConfigs = [
-      { name: '台北市', l1x: 520, l1y: 295, l2x: 810, l2y: 295 },
-      { name: '新北市', l1x: 520, l1y: 392, l2x: 810, l2y: 392 },
-      { name: '桃園市', l1x: 520, l1y: 489, l2x: 810, l2y: 489 },
-      { name: '台中市', l1x: 520, l1y: 586, l2x: 810, l2y: 586 },
-      { name: '台南市', l1x: 520, l1y: 683, l2x: 810, l2y: 683 },
-      { name: '高雄市', l1x: 520, l1y: 780, l2x: 810, l2y: 780 }
+      { name: '台北市', l1x: 535, l1y: 295, l2x: 825, l2y: 295 },
+      { name: '新北市', l1x: 535, l1y: 392, l2x: 825, l2y: 392 },
+      { name: '桃園市', l1x: 535, l1y: 489, l2x: 825, l2y: 489 },
+      { name: '台中市', l1x: 535, l1y: 586, l2x: 825, l2y: 586 },
+      { name: '台南市', l1x: 535, l1y: 683, l2x: 825, l2y: 683 },
+      { name: '高雄市', l1x: 535, l1y: 780, l2x: 825, l2y: 780 }
     ];
     
     // ✅ 逐一繪製燈號圓圈
