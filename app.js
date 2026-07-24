@@ -576,22 +576,39 @@ function getLightText(emoji) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片
+// ✅ 使用 Jimp 生成第一頁圖片（先塗白再寫入）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
+    console.log(`\n📊 開始生成圖片...`);
+    console.log(`📅 日期: ${day0Label} | ${day1Label}`);
+    console.log(`🕐 資料時間: ${dataTimeStr}`);
+    
     // 載入模板
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // ✅ 使用大字體
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
-    // ✅ 寫入日期
+    // ✅ 先塗白日期區域
+    image.scan(340, 150, 300, 60, function(x, y, idx) {
+      this.bitmap.data[idx] = 255;
+      this.bitmap.data[idx + 1] = 255;
+      this.bitmap.data[idx + 2] = 255;
+      this.bitmap.data[idx + 3] = 255;
+    });
+    image.scan(610, 150, 300, 60, function(x, y, idx) {
+      this.bitmap.data[idx] = 255;
+      this.bitmap.data[idx + 1] = 255;
+      this.bitmap.data[idx + 2] = 255;
+      this.bitmap.data[idx + 3] = 255;
+    });
+    
+    // 寫入日期
     image.print(font, 350, 170, day0Label);
     image.print(font, 620, 170, day1Label);
     
-    // ✅ 寫入城市燈號
+    // ✅ 寫入城市燈號（先塗白再寫入）
     const cityConfigs = [
       { name: '台北市', nameX: 50, nameY: 320, l1x: 370, l1y: 320, l2x: 640, l2y: 320 },
       { name: '新北市', nameX: 50, nameY: 415, l1x: 370, l1y: 415, l2x: 640, l2y: 415 },
@@ -605,7 +622,20 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ 寫入燈號
+      // ✅ 先塗白燈號區域（清除模板上的 ??）
+      image.scan(c.l1x - 30, c.l1y - 30, 80, 60, function(x, y, idx) {
+        this.bitmap.data[idx] = 255;
+        this.bitmap.data[idx + 1] = 255;
+        this.bitmap.data[idx + 2] = 255;
+        this.bitmap.data[idx + 3] = 255;
+      });
+      image.scan(c.l2x - 30, c.l2y - 30, 80, 60, function(x, y, idx) {
+        this.bitmap.data[idx] = 255;
+        this.bitmap.data[idx + 1] = 255;
+        this.bitmap.data[idx + 2] = 255;
+        this.bitmap.data[idx + 3] = 255;
+      });
+      
       const text1 = data.day0 && data.day0.light ? data.day0.light.name : '?';
       const text2 = data.day1 && data.day1.light ? data.day1.light.name : '?';
       image.print(font, c.l1x, c.l1y, text1);
@@ -614,11 +644,18 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       console.log(`🔍 ${c.name}: 燈號寫入 -> ${text1} | ${text2}`);
     }
     
-    // ✅ 寫入資料時間
+    // ✅ 先塗白資料時間區域
+    image.scan(280, 1100, 400, 60, function(x, y, idx) {
+      this.bitmap.data[idx] = 255;
+      this.bitmap.data[idx + 1] = 255;
+      this.bitmap.data[idx + 2] = 255;
+      this.bitmap.data[idx + 3] = 255;
+    });
+    
+    // 寫入資料時間
     const displayTime = dataTimeStr || '2026-07-24 14:00:00';
     image.print(font, 300, 1120, `資料時間：${displayTime}`);
     
-    // ✅ 輸出圖片 Buffer
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return buffer;
     
