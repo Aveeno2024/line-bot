@@ -5,7 +5,6 @@ const fs = require('fs');
 const cron = require('node-cron');
 const Jimp = require('jimp');
 const path = require('path');
-const FormData = require('form-data');
 const app = express();
 app.use(express.json());
 
@@ -13,6 +12,7 @@ app.use(express.json());
 // ✅ 靜態檔案服務
 // ==========================================
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
+app.use('/tmp', express.static('/tmp'));
 
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
@@ -584,28 +584,29 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // Jimp 內建字體
-    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
+    // 縮小圖片（避免檔案過大）
+    image.resize(600, Jimp.AUTO);
+    
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
     // 寫入日期
-    image.print(font, 340, 158, day0Label);
-    image.print(font, 610, 158, day1Label);
+    image.print(font, 180, 85, day0Label);
+    image.print(font, 330, 85, day1Label);
     
     // 寫入城市燈號
     const cityConfigs = [
-      { name: '台北市', nameX: 30, nameY: 290, l1x: 360, l1y: 290, l2x: 620, l2y: 290 },
-      { name: '新北市', nameX: 30, nameY: 370, l1x: 360, l1y: 370, l2x: 620, l2y: 370 },
-      { name: '桃園市', nameX: 30, nameY: 450, l1x: 360, l1y: 450, l2x: 620, l2y: 450 },
-      { name: '台中市', nameX: 30, nameY: 530, l1x: 360, l1y: 530, l2x: 620, l2y: 530 },
-      { name: '台南市', nameX: 30, nameY: 610, l1x: 360, l1y: 610, l2x: 620, l2y: 610 },
-      { name: '高雄市', nameX: 30, nameY: 690, l1x: 360, l1y: 690, l2x: 620, l2y: 690 }
+      { name: '台北市', nameX: 15, nameY: 160, l1x: 190, l1y: 160, l2x: 330, l2y: 160 },
+      { name: '新北市', nameX: 15, nameY: 205, l1x: 190, l1y: 205, l2x: 330, l2y: 205 },
+      { name: '桃園市', nameX: 15, nameY: 250, l1x: 190, l1y: 250, l2x: 330, l2y: 250 },
+      { name: '台中市', nameX: 15, nameY: 295, l1x: 190, l1y: 295, l2x: 330, l2y: 295 },
+      { name: '台南市', nameX: 15, nameY: 340, l1x: 190, l1y: 340, l2x: 330, l2y: 340 },
+      { name: '高雄市', nameX: 15, nameY: 385, l1x: 190, l1y: 385, l2x: 330, l2y: 385 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // 寫入燈號
       const text1 = data.day0 && data.day0.light ? getLightText(data.day0.light.emoji) : '?';
       const text2 = data.day1 && data.day1.light ? getLightText(data.day1.light.emoji) : '?';
       image.print(font, c.l1x, c.l1y, text1);
@@ -613,9 +614,8 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     }
     
     // 寫入資料時間
-    image.print(font, 280, 1010, `資料時間：${dataTimeStr || ''}`);
+    image.print(font, 140, 540, `資料時間：${dataTimeStr || ''}`);
     
-    // 輸出圖片 Buffer
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return buffer;
     
@@ -626,60 +626,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 上傳圖片到 Cloudinary（壓縮後上傳）
-// ==========================================
-async function uploadToCloudinary(imageBuffer) {
-  try {
-    const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
-    const UPLOAD_PRESET = process.env.CLOUDINARY_UPLOAD_PRESET || 'my_preset';
-    
-    if (!CLOUD_NAME) {
-      console.error('❌ 未設定 CLOUDINARY_CLOUD_NAME 環境變數');
-      return null;
-    }
-    
-    if (!UPLOAD_PRESET) {
-      console.error('❌ 未設定 CLOUDINARY_UPLOAD_PRESET 環境變數');
-      return null;
-    }
-    
-    // ✅ 壓縮圖片（縮小到 800px 寬，品質 70%）
-    const image = await Jimp.read(imageBuffer);
-    image.resize(800, Jimp.AUTO);
-    image.quality(70);
-    const compressedBuffer = await image.getBufferAsync(Jimp.MIME_JPEG);
-    
-    const formData = new FormData();
-    formData.append('file', compressedBuffer.toString('base64'));
-    formData.append('upload_preset', UPLOAD_PRESET);
-    
-    console.log(`📤 上傳圖片到 Cloudinary (${CLOUD_NAME})...`);
-    
-    const response = await axios.post(
-      `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-      formData,
-      {
-        headers: formData.getHeaders(),
-        timeout: 30000
-      }
-    );
-    
-    if (response.data && response.data.secure_url) {
-      console.log('✅ 圖片上傳成功');
-      return response.data.secure_url;
-    } else {
-      console.error('❌ 上傳失敗:', response.data);
-      return null;
-    }
-    
-  } catch (error) {
-    console.error('❌ 上傳失敗:', error.response?.data || error.message);
-    return null;
-  }
-}
-
-// ==========================================
-// ✅ 產生第一頁圖片訊息（使用 Cloudinary 上傳）
+// ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
 async function generatePage1ImageFlex(startOffset = 0) {
   try {
@@ -718,7 +665,6 @@ async function generatePage1ImageFlex(startOffset = 0) {
     // 生成圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     if (!imageBuffer) {
-      // 如果生成失敗，回傳靜態模板圖片
       return {
         type: 'image',
         originalContentUrl: `${BASE_URL}/images/template_page1.png`,
@@ -726,21 +672,16 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 上傳到 Cloudinary（會自動壓縮）
-    const imageUrl = await uploadToCloudinary(imageBuffer);
-    if (imageUrl) {
-      return {
-        type: 'image',
-        originalContentUrl: imageUrl,
-        previewImageUrl: imageUrl
-      };
-    }
+    // ✅ 儲存到 /tmp 目錄（Render 可寫入）
+    const filename = `current_page1_${Date.now()}.png`;
+    const outputPath = path.join('/tmp', filename);
+    await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
+    console.log(`✅ 圖片已儲存到 /tmp/${filename}`);
     
-    // 如果上傳失敗，回傳模板圖片
     return {
       type: 'image',
-      originalContentUrl: `${BASE_URL}/images/template_page1.png`,
-      previewImageUrl: `${BASE_URL}/images/template_page1.png`
+      originalContentUrl: `${BASE_URL}/tmp/${filename}`,
+      previewImageUrl: `${BASE_URL}/tmp/${filename}`
     };
     
   } catch (error) {
@@ -882,22 +823,23 @@ async function precomputeAndCache() {
       }
     }
     
-    // 生成圖片
+    // 生成並儲存圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     let page1 = null;
     if (imageBuffer) {
-      // 上傳到 Cloudinary（會自動壓縮）
-      const imageUrl = await uploadToCloudinary(imageBuffer);
-      if (imageUrl) {
-        page1 = {
-          type: 'image',
-          originalContentUrl: imageUrl,
-          previewImageUrl: imageUrl
-        };
-      }
+      const filename = `current_page1_${Date.now()}.png`;
+      const outputPath = path.join('/tmp', filename);
+      await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
+      console.log(`✅ 快取圖片已儲存到 /tmp/${filename}`);
+      
+      page1 = {
+        type: 'image',
+        originalContentUrl: `${BASE_URL}/tmp/${filename}`,
+        previewImageUrl: `${BASE_URL}/tmp/${filename}`
+      };
     }
     
-    // 如果沒有上傳成功，使用模板圖片
+    // 如果沒有儲存成功，使用模板圖片
     if (!page1) {
       page1 = {
         type: 'image',
