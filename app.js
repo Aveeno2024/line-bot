@@ -646,7 +646,7 @@ function drawColoredCircle(image, x, y, color, radius = 28) {
   });
 }
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（最新座標）
+// ✅ 使用 Jimp 生成第一頁圖片（更新座標版）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -658,14 +658,14 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // ✅ 使用 32px 字體（對 Emoji 支援較好）
+    // ✅ 使用 32px 字體（用於文字日期和時間）
     const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // ✅ 寫入日期（最新座標）
+    // ✅ 寫入日期（新座標）
     image.print(font, 510, 185, day0Label);
     image.print(font, 800, 185, day1Label);
     
-    // ✅ 寫入城市燈號（最新座標）
+    // ✅ 城市燈號位置（新座標）
     const cityConfigs = [
       { name: '台北市', l1x: 510, l1y: 275, l2x: 800, l2y: 275 },
       { name: '新北市', l1x: 510, l1y: 372, l2x: 800, l2y: 372 },
@@ -675,29 +675,37 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       { name: '高雄市', l1x: 510, l1y: 760, l2x: 800, l2y: 760 }
     ];
     
+    // ✅ 逐一繪製燈號圓圈
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ Emoji 燈號
-      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '⬜';
-      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '⬜';
+      // 取得燈號顏色（如果沒有資料則顯示灰色）
+      const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
+      const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
       
-      image.print(font, c.l1x, c.l1y, emoji1);
-      image.print(font, c.l2x, c.l2y, emoji2);
+      // 繪製圓圈（半徑 22px，配合新尺寸）
+      await drawColoredCircle(image, c.l1x, c.l1y, color1, 22);
+      await drawColoredCircle(image, c.l2x, c.l2y, color2, 22);
       
-      console.log(`🔍 ${c.name}: 燈號寫入 -> ${emoji1} | ${emoji2}`);
+      // 取得燈號名稱（用於日誌）
+      const name1 = data.day0 && data.day0.light ? data.day0.light.name : '無資料';
+      const name2 = data.day1 && data.day1.light ? data.day1.light.name : '無資料';
+      console.log(`🔍 ${c.name}: 燈號寫入 -> ${name1}(${color1}) | ${name2}(${color2})`);
     }
     
-    // ✅ 寫入資料時間（最新座標）
-    const displayTime = dataTimeStr || '2026-07-24 14:00:00';
+    // ✅ 寫入資料時間（新座標）
+    const displayTime = dataTimeStr || '2026-07-25 14:00:00';
     image.print(font, 450, 870, displayTime);
     
+    // 輸出為 PNG Buffer
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
+    console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
     return buffer;
     
   } catch (error) {
     console.error('❌ 生成圖片失敗:', error.message);
+    console.error('   錯誤堆疊:', error.stack);
     return null;
   }
 }
