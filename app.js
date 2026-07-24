@@ -584,43 +584,41 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // 縮小圖片（避免檔案過大）
-    image.resize(600, Jimp.AUTO);
-    
-    const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
+    // ✅ 使用大字體
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
     // ✅ 寫入日期
-    image.print(font, 180, 80, day0Label);
-    image.print(font, 330, 80, day1Label);
+    image.print(font, 350, 170, day0Label);
+    image.print(font, 620, 170, day1Label);
     
     // ✅ 寫入城市燈號
     const cityConfigs = [
-      { name: '台北市', nameX: 15, nameY: 155, l1x: 190, l1y: 155, l2x: 330, l2y: 155 },
-      { name: '新北市', nameX: 15, nameY: 200, l1x: 190, l1y: 200, l2x: 330, l2y: 200 },
-      { name: '桃園市', nameX: 15, nameY: 245, l1x: 190, l1y: 245, l2x: 330, l2y: 245 },
-      { name: '台中市', nameX: 15, nameY: 290, l1x: 190, l1y: 290, l2x: 330, l2y: 290 },
-      { name: '台南市', nameX: 15, nameY: 335, l1x: 190, l1y: 335, l2x: 330, l2y: 335 },
-      { name: '高雄市', nameX: 15, nameY: 380, l1x: 190, l1y: 380, l2x: 330, l2y: 380 }
+      { name: '台北市', nameX: 50, nameY: 320, l1x: 370, l1y: 320, l2x: 640, l2y: 320 },
+      { name: '新北市', nameX: 50, nameY: 415, l1x: 370, l1y: 415, l2x: 640, l2y: 415 },
+      { name: '桃園市', nameX: 50, nameY: 510, l1x: 370, l1y: 510, l2x: 640, l2y: 510 },
+      { name: '台中市', nameX: 50, nameY: 605, l1x: 370, l1y: 605, l2x: 640, l2y: 605 },
+      { name: '台南市', nameX: 50, nameY: 700, l1x: 370, l1y: 700, l2x: 640, l2y: 700 },
+      { name: '高雄市', nameX: 50, nameY: 795, l1x: 370, l1y: 795, l2x: 640, l2y: 795 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ 除錯 LOG
-      console.log(`🔍 ${c.name}: day0 =`, data.day0 ? data.day0.light.name : 'null');
-      console.log(`🔍 ${c.name}: day1 =`, data.day1 ? data.day1.light.name : 'null');
-      
-      // ✅ 直接傳遞文字，不透過 getLightText
+      // ✅ 寫入燈號
       const text1 = data.day0 && data.day0.light ? data.day0.light.name : '?';
       const text2 = data.day1 && data.day1.light ? data.day1.light.name : '?';
       image.print(font, c.l1x, c.l1y, text1);
       image.print(font, c.l2x, c.l2y, text2);
+      
+      console.log(`🔍 ${c.name}: 燈號寫入 -> ${text1} | ${text2}`);
     }
     
-    // 寫入資料時間
-    image.print(font, 140, 535, `資料時間：${dataTimeStr || ''}`);
+    // ✅ 寫入資料時間
+    const displayTime = dataTimeStr || '2026-07-24 14:00:00';
+    image.print(font, 300, 1120, `資料時間：${displayTime}`);
     
+    // ✅ 輸出圖片 Buffer
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return buffer;
     
@@ -650,6 +648,14 @@ async function generatePage1ImageFlex(startOffset = 0) {
       }
     }
     
+    // ✅ 確保 globalDataTime 有值
+    if (!globalDataTime) {
+      const now = new Date();
+      const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
+      globalDataTime = dateStr;
+      console.log(`⚠️ 使用備用時間: ${globalDataTime}`);
+    }
+    
     // 取得日期
     let day0Label = '日期1';
     let day1Label = '日期2';
@@ -668,7 +674,7 @@ async function generatePage1ImageFlex(startOffset = 0) {
     }
     
     // 生成圖片
-    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
+    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime);
     if (!imageBuffer) {
       return {
         type: 'image',
@@ -677,10 +683,10 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 儲存到 /tmp 目錄（Render 可寫入）
+    // ✅ 儲存到 /tmp 目錄
     const filename = `current_page1_${Date.now()}.png`;
     const outputPath = path.join('/tmp', filename);
-    await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
+    fs.writeFileSync(outputPath, imageBuffer);
     console.log(`✅ 圖片已儲存到 /tmp/${filename}`);
     
     return {
@@ -834,7 +840,7 @@ async function precomputeAndCache() {
     if (imageBuffer) {
       const filename = `current_page1_${Date.now()}.png`;
       const outputPath = path.join('/tmp', filename);
-      await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
+      fs.writeFileSync(outputPath, imageBuffer);
       console.log(`✅ 快取圖片已儲存到 /tmp/${filename}`);
       
       page1 = {
