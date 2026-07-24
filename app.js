@@ -576,7 +576,7 @@ function getLightText(emoji) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（無塗白）
+// ✅ 使用 Jimp 生成第一頁圖片（32px Emoji）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -588,39 +588,40 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
+    // ✅ 使用 32px 字體（對 Emoji 支援較好）
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // ✅ 寫入日期
-    image.print(font, 500, 195, day0Label);
-    image.print(font, 800, 195, day1Label);
+    // ✅ 寫入日期（更新座標）
+    image.print(font, 500, 180, day0Label);
+    image.print(font, 800, 180, day1Label);
     
-    // ✅ 寫入城市燈號（Emoji）
+    // ✅ 寫入城市燈號（更新座標）
     const cityConfigs = [
-      { name: '台北市', l1x: 500, l1y: 285, l2x: 800, l2y: 285 },
-      { name: '新北市', l1x: 500, l1y: 382, l2x: 800, l2y: 382 },
-      { name: '桃園市', l1x: 500, l1y: 479, l2x: 800, l2y: 479 },
-      { name: '台中市', l1x: 500, l1y: 576, l2x: 800, l2y: 576 },
-      { name: '台南市', l1x: 500, l1y: 673, l2x: 800, l2y: 673 },
-      { name: '高雄市', l1x: 500, l1y: 770, l2x: 800, l2y: 770 }
+      { name: '台北市', l1x: 500, l1y: 270, l2x: 800, l2y: 270 },
+      { name: '新北市', l1x: 500, l1y: 367, l2x: 800, l2y: 367 },
+      { name: '桃園市', l1x: 500, l1y: 464, l2x: 800, l2y: 464 },
+      { name: '台中市', l1x: 500, l1y: 561, l2x: 800, l2y: 561 },
+      { name: '台南市', l1x: 500, l1y: 658, l2x: 800, l2y: 658 },
+      { name: '高雄市', l1x: 500, l1y: 755, l2x: 800, l2y: 755 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
-      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
+      // ✅ Emoji 燈號
+      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '⬜';
+      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '⬜';
       
-      // ✅ 直接寫入，不塗白
       image.print(font, c.l1x, c.l1y, emoji1);
       image.print(font, c.l2x, c.l2y, emoji2);
       
       console.log(`🔍 ${c.name}: 燈號寫入 -> ${emoji1} | ${emoji2}`);
     }
     
-    // ✅ 寫入資料時間
+    // ✅ 寫入資料時間（更新座標）
     const displayTime = dataTimeStr || '2026-07-24 14:00:00';
-    image.print(font, 592, 882, displayTime);
+    image.print(font, 450, 865, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return buffer;
