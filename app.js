@@ -576,7 +576,7 @@ function getLightText(emoji) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（Emoji 燈號）
+// ✅ 使用 Jimp 生成第一頁圖片（無塗白）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -588,10 +588,9 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // ✅ 使用 32px 字體（對 Emoji 支援較好）
-    const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
-    // ✅ 寫入日期（數字）
+    // ✅ 寫入日期
     image.print(font, 500, 195, day0Label);
     image.print(font, 800, 195, day1Label);
     
@@ -609,24 +608,10 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ 寫入 Emoji 燈號
-      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '⬜';
-      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '⬜';
+      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
+      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
       
-      // 先塗白燈號區域
-      image.scan(c.l1x - 40, c.l1y - 30, 80, 60, function(x, y, idx) {
-        this.bitmap.data[idx] = 255;
-        this.bitmap.data[idx + 1] = 255;
-        this.bitmap.data[idx + 2] = 255;
-        this.bitmap.data[idx + 3] = 255;
-      });
-      image.scan(c.l2x - 40, c.l2y - 30, 80, 60, function(x, y, idx) {
-        this.bitmap.data[idx] = 255;
-        this.bitmap.data[idx + 1] = 255;
-        this.bitmap.data[idx + 2] = 255;
-        this.bitmap.data[idx + 3] = 255;
-      });
-      
+      // ✅ 直接寫入，不塗白
       image.print(font, c.l1x, c.l1y, emoji1);
       image.print(font, c.l2x, c.l2y, emoji2);
       
@@ -635,12 +620,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     
     // ✅ 寫入資料時間
     const displayTime = dataTimeStr || '2026-07-24 14:00:00';
-    image.scan(592 - 200, 882 - 40, 400, 80, function(x, y, idx) {
-      this.bitmap.data[idx] = 255;
-      this.bitmap.data[idx + 1] = 255;
-      this.bitmap.data[idx + 2] = 255;
-      this.bitmap.data[idx + 3] = 255;
-    });
     image.print(font, 592, 882, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
@@ -651,7 +630,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
