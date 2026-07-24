@@ -601,79 +601,50 @@ function getLightText(emoji) {
 }
 
 // ==========================================
-// ✅ 繪製彩色圓圈（替代 Emoji，解決 Jimp 不支援問題）
+// ✅ 繪製彩色圓圈（精簡穩定版）
 // ==========================================
 function drawColoredCircle(image, x, y, color, radius = 28) {
   return new Promise((resolve) => {
     try {
-      // 創建一個圓形圖片
       const size = radius * 2;
-      const circle = new Jimp(size, size, 0x00000000, (err) => {
-        if (err) {
-          console.error('❌ 建立圓圈失敗:', err);
-          resolve();
-          return;
-        }
-        
-        // 解析顏色
-        let hexColor = 0x00CC00FF; // 預設綠色
-        switch(color) {
-          case '#FF0000': hexColor = 0xFF0000FF; break; // 紅
-          case '#FF8C00': hexColor = 0xFF8C00FF; break; // 橘
-          case '#FFD700': hexColor = 0xFFD700FF; break; // 黃
-          case '#00CC00': hexColor = 0x00CC00FF; break; // 綠
-          default: hexColor = 0xCCCCCCFF; break; // 灰（無資料）
-        }
-        
-        // 掃描每個像素，畫圓（有抗鋸齒效果）
-        for (let py = 0; py < size; py++) {
-          for (let px = 0; px < size; px++) {
-            const dx = px - radius;
-            const dy = py - radius;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if (dist <= radius) {
-              // 邊緣柔和（抗鋸齒）
-              if (dist > radius - 1.5) {
-                const alpha = Math.max(0, Math.min(255, Math.round((radius - dist) * 170)));
-                const baseColor = hexColor & 0xFFFFFF00;
-                circle.setPixelColor(baseColor | alpha, px, py);
-              } else {
-                circle.setPixelColor(hexColor, px, py);
-              }
-            }
+      
+      // ✅ 顏色對照表（使用 32 位元顏色值）
+      const colorMap = {
+        '#FF0000': 0xFF0000FF,   // 紅
+        '#FF8C00': 0xFF8C00FF,   // 橘
+        '#FFD700': 0xFFD700FF,   // 黃
+        '#00CC00': 0x00CC00FF,   // 綠
+        '#CCCCCC': 0xCCCCCCFF    // 灰
+      };
+      
+      let fillColor = colorMap[color] || 0xCCCCCCFF;
+      
+      // 建立圓形圖片
+      const circle = new Jimp(size, size, 0x00000000);
+      
+      // 畫圓
+      for (let py = 0; py < size; py++) {
+        for (let px = 0; px < size; px++) {
+          const dx = px - radius;
+          const dy = py - radius;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist <= radius) {
+            circle.setPixelColor(fillColor, px, py);
           }
         }
-        
-        // ✅ 加上白色邊框（讓燈號更明顯）
-        for (let py = 0; py < size; py++) {
-          for (let px = 0; px < size; px++) {
-            const dx = px - radius;
-            const dy = py - radius;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            // 邊框：在圓形邊緣畫一圈白色
-            if (dist > radius - 3 && dist <= radius) {
-              const currentColor = circle.getPixelColor(px, py);
-              // 只覆蓋有顏色的像素
-              if ((currentColor & 0xFF) > 0) {
-                circle.setPixelColor(0xFFFFFFFF, px, py);
-              }
-            }
-          }
-        }
-        
-        // 合成到主圖片（位置對齊中心）
-        image.composite(circle, x - radius, y - radius);
-        resolve();
-      });
+      }
+      
+      // 合成到主圖片
+      image.composite(circle, x - radius, y - radius);
+      resolve();
+      
     } catch (error) {
       console.error('❌ drawColoredCircle 錯誤:', error);
       resolve();
     }
   });
 }
-
 // ==========================================
 // ✅ 使用 Jimp 生成第一頁圖片（修改版 - 用圓圈替代 Emoji）
 // ==========================================
