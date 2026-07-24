@@ -589,11 +589,11 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     
     const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // 寫入日期
+    // ✅ 寫入日期（對應兩欄模板）
     image.print(font, 180, 85, day0Label);
     image.print(font, 330, 85, day1Label);
     
-    // 寫入城市燈號
+    // ✅ 寫入城市燈號
     const cityConfigs = [
       { name: '台北市', nameX: 15, nameY: 160, l1x: 190, l1y: 160, l2x: 330, l2y: 160 },
       { name: '新北市', nameX: 15, nameY: 205, l1x: 190, l1y: 205, l2x: 330, l2y: 205 },
@@ -606,6 +606,10 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
+      
+      // ✅ 除錯 LOG
+      console.log(`🔍 ${c.name}: day0 light =`, data.day0 ? data.day0.light : 'null');
+      console.log(`🔍 ${c.name}: day1 light =`, data.day1 ? data.day1.light : 'null');
       
       const text1 = data.day0 && data.day0.light ? getLightText(data.day0.light.emoji) : '?';
       const text2 = data.day1 && data.day1.light ? getLightText(data.day1.light.emoji) : '?';
