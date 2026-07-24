@@ -576,7 +576,7 @@ function getLightText(emoji) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（根據您的座標）
+// ✅ 使用 Jimp 生成第一頁圖片（更新座標 + Emoji 燈號）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -592,49 +592,50 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
     // ✅ 寫入日期（根據您的座標）
-    // 日期1: (600, 235)
-    image.print(font, 600, 235, day0Label);
-    // 日期2: (940, 235)
-    image.print(font, 940, 235, day1Label);
+    // 日期1: (600, 220)
+    image.print(font, 600, 220, day0Label);
+    // 日期2: (940, 220)
+    image.print(font, 940, 220, day1Label);
     
     // ✅ 寫入城市燈號（根據您的座標）
     const cityConfigs = [
-      // 台北市: 燈號1 (600, 330), 燈號2 (940, 330)
-      { l1x: 600, l1y: 330, l2x: 940, l2y: 330 },
-      // 新北市: 燈號1 (600, 435), 燈號2 (940, 435)
-      { l1x: 600, l1y: 435, l2x: 940, l2y: 435 },
-      // 桃園市: 燈號1 (600, 540), 燈號2 (940, 540)
-      { l1x: 600, l1y: 540, l2x: 940, l2y: 540 },
-      // 台中市: 燈號1 (600, 645), 燈號2 (940, 645)
-      { l1x: 600, l1y: 645, l2x: 940, l2y: 645 },
-      // 台南市: 燈號1 (600, 750), 燈號2 (940, 750)
-      { l1x: 600, l1y: 750, l2x: 940, l2y: 750 },
-      // 高雄市: 燈號1 (600, 855), 燈號2 (940, 855)
-      { l1x: 600, l1y: 855, l2x: 940, l2y: 855 }
+      // 台北市: 燈號1 (600, 310), 燈號2 (940, 310)
+      { l1x: 600, l1y: 310, l2x: 940, l2y: 310 },
+      // 新北市: 燈號1 (600, 417), 燈號2 (940, 417)
+      { l1x: 600, l1y: 417, l2x: 940, l2y: 417 },
+      // 桃園市: 燈號1 (600, 524), 燈號2 (940, 524)
+      { l1x: 600, l1y: 524, l2x: 940, l2y: 524 },
+      // 台中市: 燈號1 (600, 631), 燈號2 (940, 631)
+      { l1x: 600, l1y: 631, l2x: 940, l2y: 631 },
+      // 台南市: 燈號1 (600, 738), 燈號2 (940, 738)
+      { l1x: 600, l1y: 738, l2x: 940, l2y: 738 },
+      // 高雄市: 燈號1 (600, 845), 燈號2 (940, 845)
+      { l1x: 600, l1y: 845, l2x: 940, l2y: 845 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // 寫入 Emoji 燈號
-      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
-      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
+      // ✅ 寫入 Emoji 燈號（直接使用 light.emoji）
+      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '❓';
+      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '❓';
       
-      // 先塗白燈號區域
-      image.scan(c.l1x - 40, c.l1y - 30, 80, 60, function(x, y, idx) {
+      // 先塗白燈號區域（清除任何殘留文字）
+      image.scan(c.l1x - 50, c.l1y - 40, 100, 80, function(x, y, idx) {
         this.bitmap.data[idx] = 255;
         this.bitmap.data[idx + 1] = 255;
         this.bitmap.data[idx + 2] = 255;
         this.bitmap.data[idx + 3] = 255;
       });
-      image.scan(c.l2x - 40, c.l2y - 30, 80, 60, function(x, y, idx) {
+      image.scan(c.l2x - 50, c.l2y - 40, 100, 80, function(x, y, idx) {
         this.bitmap.data[idx] = 255;
         this.bitmap.data[idx + 1] = 255;
         this.bitmap.data[idx + 2] = 255;
         this.bitmap.data[idx + 3] = 255;
       });
       
+      // 寫入 Emoji
       image.print(font, c.l1x, c.l1y, emoji1);
       image.print(font, c.l2x, c.l2y, emoji2);
       
@@ -642,15 +643,15 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     }
     
     // ✅ 寫入資料時間（根據您的座標）
-    // 資料時間: (770, 992)
+    // 資料時間: (470, 980)
     const displayTime = dataTimeStr || '2026-07-24 14:00:00';
-    image.scan(770 - 200, 992 - 30, 400, 60, function(x, y, idx) {
+    image.scan(470 - 200, 980 - 40, 400, 80, function(x, y, idx) {
       this.bitmap.data[idx] = 255;
       this.bitmap.data[idx + 1] = 255;
       this.bitmap.data[idx + 2] = 255;
       this.bitmap.data[idx + 3] = 255;
     });
-    image.print(font, 770, 992, displayTime);
+    image.print(font, 470, 980, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return buffer;
@@ -660,7 +661,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
