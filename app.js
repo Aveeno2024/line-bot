@@ -5,14 +5,14 @@ const fs = require('fs');
 const cron = require('node-cron');
 const Jimp = require('jimp');
 const path = require('path');
-const FormData = require('form-data');
 const app = express();
 app.use(express.json());
 
 // ==========================================
-// ✅ 靜態檔案服務（讓 Render 可以存取 public/images 中的圖片）
+// ✅ 靜態檔案服務
 // ==========================================
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
+app.use('/tmp', express.static('/tmp'));
 
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
@@ -584,44 +584,38 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // Jimp 內建字體
-    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
+    // 縮小圖片（避免檔案過大）
+    image.resize(600, Jimp.AUTO);
     
-    // ============================================================
-    // ✅ 寫入日期
-    // ============================================================
-    image.print(font, 340, 158, day0Label);
-    image.print(font, 610, 158, day1Label);
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // ============================================================
-    // ✅ 寫入城市燈號
-    // ============================================================
+    // 寫入日期
+    image.print(font, 180, 85, day0Label);
+    image.print(font, 330, 85, day1Label);
+    
+    // 寫入城市燈號
     const cityConfigs = [
-      { name: '台北市', nameX: 30, nameY: 290, l1x: 360, l1y: 290, l2x: 620, l2y: 290 },
-      { name: '新北市', nameX: 30, nameY: 370, l1x: 360, l1y: 370, l2x: 620, l2y: 370 },
-      { name: '桃園市', nameX: 30, nameY: 450, l1x: 360, l1y: 450, l2x: 620, l2y: 450 },
-      { name: '台中市', nameX: 30, nameY: 530, l1x: 360, l1y: 530, l2x: 620, l2y: 530 },
-      { name: '台南市', nameX: 30, nameY: 610, l1x: 360, l1y: 610, l2x: 620, l2y: 610 },
-      { name: '高雄市', nameX: 30, nameY: 690, l1x: 360, l1y: 690, l2x: 620, l2y: 690 }
+      { name: '台北市', nameX: 15, nameY: 160, l1x: 190, l1y: 160, l2x: 330, l2y: 160 },
+      { name: '新北市', nameX: 15, nameY: 205, l1x: 190, l1y: 205, l2x: 330, l2y: 205 },
+      { name: '桃園市', nameX: 15, nameY: 250, l1x: 190, l1y: 250, l2x: 330, l2y: 250 },
+      { name: '台中市', nameX: 15, nameY: 295, l1x: 190, l1y: 295, l2x: 330, l2y: 295 },
+      { name: '台南市', nameX: 15, nameY: 340, l1x: 190, l1y: 340, l2x: 330, l2y: 340 },
+      { name: '高雄市', nameX: 15, nameY: 385, l1x: 190, l1y: 385, l2x: 330, l2y: 385 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // 寫入燈號
       const text1 = data.day0 && data.day0.light ? getLightText(data.day0.light.emoji) : '?';
       const text2 = data.day1 && data.day1.light ? getLightText(data.day1.light.emoji) : '?';
       image.print(font, c.l1x, c.l1y, text1);
       image.print(font, c.l2x, c.l2y, text2);
     }
     
-    // ============================================================
-    // ✅ 寫入資料時間
-    // ============================================================
-    image.print(font, 280, 1010, `資料時間：${dataTimeStr || ''}`);
+    // 寫入資料時間
+    image.print(font, 140, 540, `資料時間：${dataTimeStr || ''}`);
     
-    // 輸出圖片 Buffer
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return buffer;
     
@@ -632,7 +626,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 產生第一頁圖片訊息（使用 Render 靜態圖片）
+// ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
 async function generatePage1ImageFlex(startOffset = 0) {
   try {
@@ -671,7 +665,6 @@ async function generatePage1ImageFlex(startOffset = 0) {
     // 生成圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     if (!imageBuffer) {
-      // 如果生成失敗，回傳靜態模板圖片
       return {
         type: 'image',
         originalContentUrl: `${BASE_URL}/images/template_page1.png`,
@@ -679,20 +672,20 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 儲存動態生成的圖片到 Render 的 public/images/ 目錄
-    const outputPath = path.join(__dirname, 'public/images/current_page1.png');
+    // ✅ 儲存到 /tmp 目錄（Render 可寫入）
+    const filename = `current_page1_${Date.now()}.png`;
+    const outputPath = path.join('/tmp', filename);
     await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
-    console.log('✅ 圖片已儲存到 public/images/current_page1.png');
+    console.log(`✅ 圖片已儲存到 /tmp/${filename}`);
     
     return {
       type: 'image',
-      originalContentUrl: `${BASE_URL}/images/current_page1.png`,
-      previewImageUrl: `${BASE_URL}/images/current_page1.png`
+      originalContentUrl: `${BASE_URL}/tmp/${filename}`,
+      previewImageUrl: `${BASE_URL}/tmp/${filename}`
     };
     
   } catch (error) {
     console.error('❌ 產生圖片訊息失敗:', error.message);
-    // 回傳靜態模板圖片作為備用
     return {
       type: 'image',
       originalContentUrl: `${BASE_URL}/images/template_page1.png`,
@@ -830,18 +823,28 @@ async function precomputeAndCache() {
       }
     }
     
-    // 生成並儲存第一頁圖片
+    // 生成並儲存圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     let page1 = null;
     if (imageBuffer) {
-      const outputPath = path.join(__dirname, 'public/images/current_page1.png');
+      const filename = `current_page1_${Date.now()}.png`;
+      const outputPath = path.join('/tmp', filename);
       await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
-      console.log('✅ 快取圖片已儲存');
+      console.log(`✅ 快取圖片已儲存到 /tmp/${filename}`);
       
       page1 = {
         type: 'image',
-        originalContentUrl: `${BASE_URL}/images/current_page1.png`,
-        previewImageUrl: `${BASE_URL}/images/current_page1.png`
+        originalContentUrl: `${BASE_URL}/tmp/${filename}`,
+        previewImageUrl: `${BASE_URL}/tmp/${filename}`
+      };
+    }
+    
+    // 如果沒有儲存成功，使用模板圖片
+    if (!page1) {
+      page1 = {
+        type: 'image',
+        originalContentUrl: `${BASE_URL}/images/template_page1.png`,
+        previewImageUrl: `${BASE_URL}/images/template_page1.png`
       };
     }
     
