@@ -589,18 +589,18 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     
     const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // ✅ 寫入日期（對應兩欄模板）
-    image.print(font, 180, 85, day0Label);
-    image.print(font, 330, 85, day1Label);
+    // ✅ 寫入日期
+    image.print(font, 180, 80, day0Label);
+    image.print(font, 330, 80, day1Label);
     
     // ✅ 寫入城市燈號
     const cityConfigs = [
-      { name: '台北市', nameX: 15, nameY: 160, l1x: 190, l1y: 160, l2x: 330, l2y: 160 },
-      { name: '新北市', nameX: 15, nameY: 205, l1x: 190, l1y: 205, l2x: 330, l2y: 205 },
-      { name: '桃園市', nameX: 15, nameY: 250, l1x: 190, l1y: 250, l2x: 330, l2y: 250 },
-      { name: '台中市', nameX: 15, nameY: 295, l1x: 190, l1y: 295, l2x: 330, l2y: 295 },
-      { name: '台南市', nameX: 15, nameY: 340, l1x: 190, l1y: 340, l2x: 330, l2y: 340 },
-      { name: '高雄市', nameX: 15, nameY: 385, l1x: 190, l1y: 385, l2x: 330, l2y: 385 }
+      { name: '台北市', nameX: 15, nameY: 155, l1x: 190, l1y: 155, l2x: 330, l2y: 155 },
+      { name: '新北市', nameX: 15, nameY: 200, l1x: 190, l1y: 200, l2x: 330, l2y: 200 },
+      { name: '桃園市', nameX: 15, nameY: 245, l1x: 190, l1y: 245, l2x: 330, l2y: 245 },
+      { name: '台中市', nameX: 15, nameY: 290, l1x: 190, l1y: 290, l2x: 330, l2y: 290 },
+      { name: '台南市', nameX: 15, nameY: 335, l1x: 190, l1y: 335, l2x: 330, l2y: 335 },
+      { name: '高雄市', nameX: 15, nameY: 380, l1x: 190, l1y: 380, l2x: 330, l2y: 380 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
@@ -608,17 +608,18 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       const data = citiesData[i] || {};
       
       // ✅ 除錯 LOG
-      console.log(`🔍 ${c.name}: day0 light =`, data.day0 ? data.day0.light : 'null');
-      console.log(`🔍 ${c.name}: day1 light =`, data.day1 ? data.day1.light : 'null');
+      console.log(`🔍 ${c.name}: day0 =`, data.day0 ? data.day0.light.name : 'null');
+      console.log(`🔍 ${c.name}: day1 =`, data.day1 ? data.day1.light.name : 'null');
       
-      const text1 = data.day0 && data.day0.light ? getLightText(data.day0.light.emoji) : '?';
-      const text2 = data.day1 && data.day1.light ? getLightText(data.day1.light.emoji) : '?';
+      // ✅ 直接傳遞文字，不透過 getLightText
+      const text1 = data.day0 && data.day0.light ? data.day0.light.name : '?';
+      const text2 = data.day1 && data.day1.light ? data.day1.light.name : '?';
       image.print(font, c.l1x, c.l1y, text1);
       image.print(font, c.l2x, c.l2y, text2);
     }
     
     // 寫入資料時間
-    image.print(font, 140, 540, `資料時間：${dataTimeStr || ''}`);
+    image.print(font, 140, 535, `資料時間：${dataTimeStr || ''}`);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     return buffer;
