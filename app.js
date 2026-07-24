@@ -22,9 +22,17 @@ const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
 // ==========================================
-// ✅ 第二張圖（燈號說明）- 固定圖片網址
+// ✅ 第二張圖（燈號說明）- 使用 Render 靜態圖片
 // ==========================================
-const PAGE2_IMAGE_URL = 'https://i.imgur.com/EZIxiKO.png';
+const BASE_URL = 'https://line-bot-v9q8.onrender.com';
+
+function generatePage2ImageFlex() {
+  return {
+    type: 'image',
+    originalContentUrl: `${BASE_URL}/images/template_page2.png`,
+    previewImageUrl: `${BASE_URL}/images/template_page2.png`
+  };
+}
 
 // GitHub 設定 (可選)
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -554,6 +562,20 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
+// ✅ 燈號文字對照表
+// ==========================================
+function getLightText(emoji) {
+  const map = {
+    '🟢': '綠',
+    '🟡': '黃',
+    '🟠': '橘',
+    '🔴': '紅',
+    '❓': '?'
+  };
+  return map[emoji] || '?';
+}
+
+// ==========================================
 // ✅ 使用 Jimp 生成第一頁圖片
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
@@ -565,36 +587,39 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     // Jimp 內建字體
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
-    // 寫入日期
-    image.print(font, 400, 140, day0Label);
-    image.print(font, 680, 140, `預${day1Label}`);
+    // ============================================================
+    // ✅ 寫入日期
+    // ============================================================
+    image.print(font, 340, 158, day0Label);
+    image.print(font, 610, 158, day1Label);
     
-    // 寫入城市燈號
+    // ============================================================
+    // ✅ 寫入城市燈號
+    // ============================================================
     const cityConfigs = [
-      { name: '臺北市', nameX: 60, nameY: 250, l1x: 460, l1y: 250, l2x: 720, l2y: 250 },
-      { name: '新北市', nameX: 60, nameY: 340, l1x: 460, l1y: 340, l2x: 720, l2y: 340 },
-      { name: '桃園市', nameX: 60, nameY: 430, l1x: 460, l1y: 430, l2x: 720, l2y: 430 },
-      { name: '臺中市', nameX: 60, nameY: 520, l1x: 460, l1y: 520, l2x: 720, l2y: 520 },
-      { name: '臺南市', nameX: 60, nameY: 610, l1x: 460, l1y: 610, l2x: 720, l2y: 610 },
-      { name: '高雄市', nameX: 60, nameY: 700, l1x: 460, l1y: 700, l2x: 720, l2y: 700 }
+      { name: '台北市', nameX: 30, nameY: 290, l1x: 360, l1y: 290, l2x: 620, l2y: 290 },
+      { name: '新北市', nameX: 30, nameY: 370, l1x: 360, l1y: 370, l2x: 620, l2y: 370 },
+      { name: '桃園市', nameX: 30, nameY: 450, l1x: 360, l1y: 450, l2x: 620, l2y: 450 },
+      { name: '台中市', nameX: 30, nameY: 530, l1x: 360, l1y: 530, l2x: 620, l2y: 530 },
+      { name: '台南市', nameX: 30, nameY: 610, l1x: 360, l1y: 610, l2x: 620, l2y: 610 },
+      { name: '高雄市', nameX: 30, nameY: 690, l1x: 360, l1y: 690, l2x: 620, l2y: 690 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // 寫入城市名稱
-      image.print(font, c.nameX, c.nameY, c.name);
-      
       // 寫入燈號
-      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
-      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
-      image.print(font, c.l1x, c.l1y, emoji1);
-      image.print(font, c.l2x, c.l2y, emoji2);
+      const text1 = data.day0 && data.day0.light ? getLightText(data.day0.light.emoji) : '?';
+      const text2 = data.day1 && data.day1.light ? getLightText(data.day1.light.emoji) : '?';
+      image.print(font, c.l1x, c.l1y, text1);
+      image.print(font, c.l2x, c.l2y, text2);
     }
     
-    // 寫入資料時間
-    image.print(font, 400, 1020, `資料時間：${dataTimeStr || ''}`);
+    // ============================================================
+    // ✅ 寫入資料時間
+    // ============================================================
+    image.print(font, 280, 1010, `資料時間：${dataTimeStr || ''}`);
     
     // 輸出圖片 Buffer
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
@@ -647,11 +672,10 @@ async function generatePage1ImageFlex(startOffset = 0) {
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     if (!imageBuffer) {
       // 如果生成失敗，回傳靜態模板圖片
-      const baseUrl = 'https://line-bot-v9q8.onrender.com';
       return {
         type: 'image',
-        originalContentUrl: `${baseUrl}/images/template_page1.png`,
-        previewImageUrl: `${baseUrl}/images/template_page1.png`
+        originalContentUrl: `${BASE_URL}/images/template_page1.png`,
+        previewImageUrl: `${BASE_URL}/images/template_page1.png`
       };
     }
     
@@ -660,21 +684,19 @@ async function generatePage1ImageFlex(startOffset = 0) {
     await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
     console.log('✅ 圖片已儲存到 public/images/current_page1.png');
     
-    const baseUrl = 'https://line-bot-v9q8.onrender.com';
     return {
       type: 'image',
-      originalContentUrl: `${baseUrl}/images/current_page1.png`,
-      previewImageUrl: `${baseUrl}/images/current_page1.png`
+      originalContentUrl: `${BASE_URL}/images/current_page1.png`,
+      previewImageUrl: `${BASE_URL}/images/current_page1.png`
     };
     
   } catch (error) {
     console.error('❌ 產生圖片訊息失敗:', error.message);
     // 回傳靜態模板圖片作為備用
-    const baseUrl = 'https://line-bot-v9q8.onrender.com';
     return {
       type: 'image',
-      originalContentUrl: `${baseUrl}/images/template_page1.png`,
-      previewImageUrl: `${baseUrl}/images/template_page1.png`
+      originalContentUrl: `${BASE_URL}/images/template_page1.png`,
+      previewImageUrl: `${BASE_URL}/images/template_page1.png`
     };
   }
 }
@@ -685,8 +707,8 @@ async function generatePage1ImageFlex(startOffset = 0) {
 function generatePage2ImageFlex() {
   return {
     type: 'image',
-    originalContentUrl: PAGE2_IMAGE_URL,
-    previewImageUrl: PAGE2_IMAGE_URL
+    originalContentUrl: `${BASE_URL}/images/template_page2.png`,
+    previewImageUrl: `${BASE_URL}/images/template_page2.png`
   };
 }
 
@@ -816,11 +838,10 @@ async function precomputeAndCache() {
       await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
       console.log('✅ 快取圖片已儲存');
       
-      const baseUrl = 'https://line-bot-v9q8.onrender.com';
       page1 = {
         type: 'image',
-        originalContentUrl: `${baseUrl}/images/current_page1.png`,
-        previewImageUrl: `${baseUrl}/images/current_page1.png`
+        originalContentUrl: `${BASE_URL}/images/current_page1.png`,
+        previewImageUrl: `${BASE_URL}/images/current_page1.png`
       };
     }
     
