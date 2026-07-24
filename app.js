@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
-// ✅ 靜態檔案服務（讓 Render 可以存取 public/images 中的圖片）
+// ✅ 靜態檔案服務
 // ==========================================
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
@@ -587,15 +587,11 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     // Jimp 內建字體
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
-    // ============================================================
-    // ✅ 寫入日期
-    // ============================================================
+    // 寫入日期
     image.print(font, 340, 158, day0Label);
     image.print(font, 610, 158, day1Label);
     
-    // ============================================================
-    // ✅ 寫入城市燈號
-    // ============================================================
+    // 寫入城市燈號
     const cityConfigs = [
       { name: '台北市', nameX: 30, nameY: 290, l1x: 360, l1y: 290, l2x: 620, l2y: 290 },
       { name: '新北市', nameX: 30, nameY: 370, l1x: 360, l1y: 370, l2x: 620, l2y: 370 },
@@ -616,9 +612,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       image.print(font, c.l2x, c.l2y, text2);
     }
     
-    // ============================================================
-    // ✅ 寫入資料時間
-    // ============================================================
+    // 寫入資料時間
     image.print(font, 280, 1010, `資料時間：${dataTimeStr || ''}`);
     
     // 輸出圖片 Buffer
@@ -632,7 +626,40 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 產生第一頁圖片訊息（使用 Render 靜態圖片）
+// ✅ 上傳圖片到 ImgBB（免費，不需 API Key）
+// ==========================================
+async function uploadToImgbb(imageBuffer) {
+  try {
+    const formData = new FormData();
+    formData.append('image', imageBuffer.toString('base64'));
+    
+    console.log('📤 上傳圖片到 ImgBB...');
+    
+    const response = await axios.post(
+      'https://api.imgbb.com/1/upload?key=free',
+      formData,
+      {
+        headers: formData.getHeaders(),
+        timeout: 30000
+      }
+    );
+    
+    if (response.data && response.data.data) {
+      console.log('✅ 圖片上傳成功');
+      return response.data.data.display_url || response.data.data.url;
+    } else {
+      console.error('❌ 上傳失敗:', response.data);
+      return null;
+    }
+    
+  } catch (error) {
+    console.error('❌ 上傳失敗:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+// ==========================================
+// ✅ 產生第一頁圖片訊息（使用 ImgBB 上傳）
 // ==========================================
 async function generatePage1ImageFlex(startOffset = 0) {
   try {
@@ -679,20 +706,25 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 儲存動態生成的圖片到 Render 的 public/images/ 目錄
-    const outputPath = path.join(__dirname, 'public/images/current_page1.png');
-    await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
-    console.log('✅ 圖片已儲存到 public/images/current_page1.png');
+    // ✅ 上傳到 ImgBB
+    const imageUrl = await uploadToImgbb(imageBuffer);
+    if (imageUrl) {
+      return {
+        type: 'image',
+        originalContentUrl: imageUrl,
+        previewImageUrl: imageUrl
+      };
+    }
     
+    // 如果上傳失敗，回傳模板圖片
     return {
       type: 'image',
-      originalContentUrl: `${BASE_URL}/images/current_page1.png`,
-      previewImageUrl: `${BASE_URL}/images/current_page1.png`
+      originalContentUrl: `${BASE_URL}/images/template_page1.png`,
+      previewImageUrl: `${BASE_URL}/images/template_page1.png`
     };
     
   } catch (error) {
     console.error('❌ 產生圖片訊息失敗:', error.message);
-    // 回傳靜態模板圖片作為備用
     return {
       type: 'image',
       originalContentUrl: `${BASE_URL}/images/template_page1.png`,
@@ -830,18 +862,27 @@ async function precomputeAndCache() {
       }
     }
     
-    // 生成並儲存第一頁圖片
+    // 生成圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     let page1 = null;
     if (imageBuffer) {
-      const outputPath = path.join(__dirname, 'public/images/current_page1.png');
-      await Jimp.read(imageBuffer).then(img => img.writeAsync(outputPath));
-      console.log('✅ 快取圖片已儲存');
-      
+      // 上傳到 ImgBB
+      const imageUrl = await uploadToImgbb(imageBuffer);
+      if (imageUrl) {
+        page1 = {
+          type: 'image',
+          originalContentUrl: imageUrl,
+          previewImageUrl: imageUrl
+        };
+      }
+    }
+    
+    // 如果沒有上傳成功，使用模板圖片
+    if (!page1) {
       page1 = {
         type: 'image',
-        originalContentUrl: `${BASE_URL}/images/current_page1.png`,
-        previewImageUrl: `${BASE_URL}/images/current_page1.png`
+        originalContentUrl: `${BASE_URL}/images/template_page1.png`,
+        previewImageUrl: `${BASE_URL}/images/template_page1.png`
       };
     }
     
