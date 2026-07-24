@@ -592,16 +592,24 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
     // ✅ 寫入日期（根據您的座標）
+    // 日期1: (600, 235)
     image.print(font, 600, 235, day0Label);
+    // 日期2: (940, 235)
     image.print(font, 940, 235, day1Label);
     
     // ✅ 寫入城市燈號（根據您的座標）
     const cityConfigs = [
+      // 台北市: 燈號1 (600, 330), 燈號2 (940, 330)
       { l1x: 600, l1y: 330, l2x: 940, l2y: 330 },
+      // 新北市: 燈號1 (600, 435), 燈號2 (940, 435)
       { l1x: 600, l1y: 435, l2x: 940, l2y: 435 },
+      // 桃園市: 燈號1 (600, 540), 燈號2 (940, 540)
       { l1x: 600, l1y: 540, l2x: 940, l2y: 540 },
+      // 台中市: 燈號1 (600, 645), 燈號2 (940, 645)
       { l1x: 600, l1y: 645, l2x: 940, l2y: 645 },
+      // 台南市: 燈號1 (600, 750), 燈號2 (940, 750)
       { l1x: 600, l1y: 750, l2x: 940, l2y: 750 },
+      // 高雄市: 燈號1 (600, 855), 燈號2 (940, 855)
       { l1x: 600, l1y: 855, l2x: 940, l2y: 855 }
     ];
     
@@ -609,6 +617,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
+      // 寫入 Emoji 燈號
       const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
       const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
       
@@ -632,7 +641,8 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       console.log(`🔍 城市${i+1}: 燈號寫入 -> ${emoji1} | ${emoji2}`);
     }
     
-    // ✅ 寫入資料時間
+    // ✅ 寫入資料時間（根據您的座標）
+    // 資料時間: (770, 992)
     const displayTime = dataTimeStr || '2026-07-24 14:00:00';
     image.scan(770 - 200, 992 - 30, 400, 60, function(x, y, idx) {
       this.bitmap.data[idx] = 255;
@@ -650,29 +660,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
-    // ==========================================
-    // 5. ✅ 寫入資料時間 (X=305, Y=1101)
-    // ==========================================
-    const displayTime = dataTimeStr || '2026-07-24 14:00:00';
-    // 先塗白背景
-    image.scan(280, 1080, 550, 70, function(x, y, idx) {
-      this.bitmap.data[idx] = 255;
-      this.bitmap.data[idx + 1] = 255;
-      this.bitmap.data[idx + 2] = 255;
-      this.bitmap.data[idx + 3] = 255;
-    });
-    image.print(font, 305, 1101, displayTime);
-    console.log(`🕐 資料時間寫入: ${displayTime} @ (305,1101)`);
-    
-    const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
-    console.log(`✅ 圖片生成完成 (1020x1200)`);
-    return buffer;
-    
-  } catch (error) {
-    console.error('❌ 生成圖片失敗:', error.message);
-    return null;
-  }
-}
+
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
