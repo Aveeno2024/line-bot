@@ -1,4 +1,3 @@
-
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -278,12 +277,11 @@ function calculateSHPI(tempOut, humOut) {
 }
 
 // ==========================================
-// 台灣時間工具函數（修正版）
+// 台灣時間工具函數（Render 系統時區 = 台灣）
 // ==========================================
 function getTaiwanTime() {
-  const now = new Date();
-  const taiwanStr = now.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-  return new Date(taiwanStr);
+  // Render 系統時區已是 Asia/Taipei，直接使用
+  return new Date();
 }
 
 function getTaiwanDateString(offset = 0) {
@@ -588,7 +586,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// ✅ 繪製彩色圓圈（精簡穩定版）
+// ✅ 繪製彩色圓圈（彩色版）
 // ==========================================
 function drawColoredCircle(image, x, y, color, radius = 22) {
   return new Promise((resolve) => {
@@ -659,11 +657,9 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ 取得燈號顏色
       const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
       const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
       
-      // ✅ 繪製彩色圓圈（不是文字）
       await drawColoredCircle(image, c.l1x, c.l1y, color1, 22);
       await drawColoredCircle(image, c.l2x, c.l2y, color2, 22);
       
@@ -685,6 +681,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
+
 // ==========================================
 // ✅ 產生第一頁圖片訊息
 // ==========================================
@@ -1176,11 +1173,10 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ==========================================
-// ⭐ 每日推播任務（使用 node-cron）- 取代 setInterval
+// ⭐ 每日推播任務（使用 node-cron）
 // ==========================================
 let lastPublishDate = null;
 
-// 每天早上 7:00 觸發
 cron.schedule('0 7 * * *', async () => {
   const taiwanTime = getTaiwanTime();
   const today = taiwanTime.toISOString().split('T')[0];
@@ -1194,11 +1190,8 @@ cron.schedule('0 7 * * *', async () => {
   lastPublishDate = today;
   
   try {
-    // 先更新快取
     console.log(`🔄 推播前更新快取...`);
     await precomputeAndCache();
-    
-    // 執行推播
     await dailyPublishTask();
   } catch (error) {
     console.error('❌ 每日推播失敗:', error);
