@@ -630,7 +630,7 @@ function drawColoredCircle(image, x, y, color, radius = 22) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（更新座標版 v6）
+// ✅ 使用 Jimp 生成第一頁圖片（彩色圓圈版）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -659,9 +659,11 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
+      // ✅ 取得燈號顏色
       const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
       const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
       
+      // ✅ 繪製彩色圓圈（不是文字）
       await drawColoredCircle(image, c.l1x, c.l1y, color1, 22);
       await drawColoredCircle(image, c.l2x, c.l2y, color2, 22);
       
@@ -683,7 +685,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生第一頁圖片訊息
 // ==========================================
