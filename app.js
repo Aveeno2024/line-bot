@@ -277,18 +277,20 @@ function calculateSHPI(tempOut, humOut) {
 }
 
 // ==========================================
-// 台灣時間工具函數（Render 系統時區 = 台灣）
+// ✅ 取得台灣時間日期字串 (YYYY-MM-DD)
 // ==========================================
-function getTaiwanTime() {
-  // Render 系統時區已是 Asia/Taipei，直接使用
-  return new Date();
-}
-
 function getTaiwanDateString(offset = 0) {
-  const taiwanTime = getTaiwanTime();
-  const year = taiwanTime.getFullYear();
-  const month = taiwanTime.getMonth() + 1;
-  const day = taiwanTime.getDate() + offset;
+  const now = new Date();
+  const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  
+  // ✅ 使用 Date 物件處理日期加減（自動處理跨月）
+  const targetDate = new Date(taiwanTime);
+  targetDate.setDate(targetDate.getDate() + offset);
+  
+  const year = targetDate.getUTCFullYear();
+  const month = targetDate.getUTCMonth() + 1;
+  const day = targetDate.getUTCDate();
+  
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
