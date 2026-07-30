@@ -1,3 +1,4 @@
+
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -277,23 +278,27 @@ function calculateSHPI(tempOut, humOut) {
 }
 
 // ==========================================
-// ✅ 取得台灣時間日期字串 (YYYY-MM-DD)
+// ✅ 台灣時間工具函數
 // ==========================================
-function getTaiwanDateString(offset = 0) {
+
+// 1️⃣ 先定義 getTaiwanTime（基礎函數）
+function getTaiwanTime() {
   const now = new Date();
-  const taiwanTime = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  
-  // ✅ 使用 Date 物件處理日期加減（自動處理跨月）
+  return new Date(now.getTime() + 8 * 60 * 60 * 1000);
+}
+
+// 2️⃣ 再定義 getTaiwanDateString（使用 getTaiwanTime）
+function getTaiwanDateString(offset = 0) {
+  const taiwanTime = getTaiwanTime();
   const targetDate = new Date(taiwanTime);
   targetDate.setDate(targetDate.getDate() + offset);
-  
   const year = targetDate.getUTCFullYear();
   const month = targetDate.getUTCMonth() + 1;
   const day = targetDate.getUTCDate();
-  
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+// 3️⃣ 最後定義 getTaiwanHour 和 getTaiwanMinute（使用 getTaiwanTime）
 function getTaiwanHour() {
   return getTaiwanTime().getHours();
 }
@@ -303,7 +308,7 @@ function getTaiwanMinute() {
 }
 
 // ==========================================
-// 中央氣象署 API - 修改版（自動找最接近時段）
+// 中央氣象署 API
 // ==========================================
 async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
   console.log(`\n🔍 ===== ${city.displayName} 第${dateOffset+1}天原始數據 ====`);
@@ -354,66 +359,49 @@ async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
     const targetDateStr = getTaiwanDateString(dateOffset);
     console.log(`📅 目標日期 (台灣時間): ${targetDateStr}`);
     
-    // ✅ 收集該日期所有時段的資料
-    let candidates = [];
+    let tempValue = null, humValue = null;
+    let actualDataTime = null;
+    
     for (const t of tempElem.Time) {
       const dataTime = t.DataTime;
       if (dataTime) {
         const parts = dataTime.split('T');
         if (parts.length === 2) {
           const datePart = parts[0];
-          if (datePart === targetDateStr) {
-            const timePart = parseInt(parts[1]?.split(':')[0]);
-            const tempValue = t.ElementValue?.[0]?.Temperature;
-            candidates.push({
-              dataTime: dataTime,
-              time: timePart,
-              temp: tempValue
-            });
+          const timePart = parts[1]?.split(':')[0];
+          if (datePart === targetDateStr && parseInt(timePart) === targetHour) {
+            tempValue = t.ElementValue?.[0]?.Temperature;
+            actualDataTime = dataTime;
+            console.log(`✅ 找到匹配: ${dataTime} → 溫度=${tempValue}℃`);
+            break;
           }
         }
       }
     }
     
-    if (candidates.length === 0) {
-      console.log(`❌ 找不到 ${targetDateStr} 的任何數據`);
-      return null;
-    }
-    
-    // ✅ 找最接近目標時段的資料
-    let best = null;
-    let minDiff = Infinity;
-    
-    for (const c of candidates) {
-      const diff = Math.abs(c.time - targetHour);
-      if (diff < minDiff) {
-        minDiff = diff;
-        best = c;
-      }
-    }
-    
-    if (best) {
-      // 找對應的濕度
-      let humidity = null;
+    if (actualDataTime) {
       for (const h of humElem.Time) {
-        if (h.DataTime === best.dataTime) {
-          humidity = h.ElementValue?.[0]?.RelativeHumidity;
+        if (h.DataTime === actualDataTime) {
+          humValue = h.ElementValue?.[0]?.RelativeHumidity;
+          console.log(`✅ 找到匹配濕度: ${actualDataTime} → 濕度=${humValue}%`);
           break;
         }
       }
-      
-      if (best.temp && humidity) {
-        const formattedTime = best.dataTime.replace('T', ' ').replace(/\+08:00/g, '').trim();
-        console.log(`✅ 找到數據: ${formattedTime} → 溫度=${best.temp}℃, 濕度=${humidity}% (目標時段 ${targetHour}:00，實際 ${best.time}:00)`);
-        return {
-          temp: Math.round(parseFloat(best.temp)),
-          humidity: Math.round(parseFloat(humidity)),
-          dataTime: formattedTime
-        };
-      }
     }
     
-    console.log(`❌ 找不到 ${targetDateStr} 接近 ${targetHour}:00 的數據`);
+    if (tempValue && humValue && actualDataTime) {
+      const formattedTime = actualDataTime.replace('T', ' ').replace(/\+08:00/g, '').trim();
+      console.log(`📊 原始數據: 溫度=${tempValue}℃, 濕度=${humValue}%`);
+      console.log(`📅 API DataTime: ${formattedTime}`);
+      console.log(`✅ API 連線成功`);
+      return {
+        temp: Math.round(parseFloat(tempValue)),
+        humidity: Math.round(parseFloat(humValue)),
+        dataTime: formattedTime
+      };
+    }
+    
+    console.log(`❌ 找不到 ${targetDateStr} ${targetHour}:00 的數據`);
     return null;
   } catch (error) {
     console.error(`❌ ${city.displayName} getForecastAtTime 錯誤: ${error.message}`);
@@ -441,7 +429,7 @@ async function getCurrentWeather(city) {
         console.log(`📊 原始數據: 溫度=${temp}℃, 濕度=${humidity}%`);
         console.log(`✅ 即時觀測成功`);
         const taiwanTime = getTaiwanTime();
-        const timeStr = `${taiwanTime.getFullYear()}/${taiwanTime.getMonth()+1}/${taiwanTime.getDate()} ${String(taiwanTime.getHours()).padStart(2,'0')}:${String(taiwanTime.getMinutes()).padStart(2,'0')}`;
+        const timeStr = `${taiwanTime.getUTCFullYear()}/${taiwanTime.getUTCMonth()+1}/${taiwanTime.getUTCDate()} ${String(taiwanTime.getUTCHours()).padStart(2,'0')}:${String(taiwanTime.getUTCMinutes()).padStart(2,'0')}`;
         return {
           temp, humidity,
           dataTime: timeStr + " (即時觀測)"
@@ -456,14 +444,11 @@ async function getCurrentWeather(city) {
   }
 }
 
-// ==========================================
-// getWeather
-// ==========================================
 async function getWeather(city, dateOffset = 0, targetHour = 14) {
   try {
     const now = getTaiwanTime();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
+    const currentHour = now.getUTCHours();
+    const currentMinute = now.getUTCMinutes();
     const currentTime = currentHour + currentMinute / 60;
     
     const useRealtime = (currentTime >= 14.0 && dateOffset === 0);
@@ -474,20 +459,15 @@ async function getWeather(city, dateOffset = 0, targetHour = 14) {
       console.log(`⏰ 台灣時間 ${String(currentHour).padStart(2,'0')}:${String(currentMinute).padStart(2,'0')}，已過 14:00，使用即時觀測資料`);
       weather = await getCurrentWeather(city);
     } else {
-      console.log(`⏰ 台灣時間 ${String(currentHour).padStart(2,'0')}:${String(currentMinute).padStart(2,'0')}，使用預報 API`);
+      console.log(`⏰ 台灣時間 ${String(currentHour).padStart(2,'0')}:${String(currentMinute).padStart(2,'0')}，尚未過 14:00，使用預報 API`);
       weather = await getForecastAtTime(city, dateOffset, targetHour);
     }
     
-    // ✅ 如果第一天預報失敗，嘗試 12:00 作為備援
-    if (!weather && dateOffset === 0) {
-      console.log(`⚠️ 第一天預報失敗，嘗試 12:00 作為備援`);
-      weather = await getForecastAtTime(city, dateOffset, 12);
-    }
-    
-    // ✅ 如果第二天預報失敗，嘗試其他時段
     if (!weather && dateOffset > 0) {
-      console.log(`⚠️ 第二天預報失敗，嘗試其他時段`);
-      const fallbackHours = [12, 18, 20, 8, 6];
+      const fallbackHours = [12, 18, 20, 8];
+      console.log(`⚠️ ${city.displayName} dateOffset=${dateOffset} 的 ${targetHour}:00 無資料`);
+      console.log(`   🔄 嘗試備用時間點: ${fallbackHours.join(', ')}`);
+      
       for (const hour of fallbackHours) {
         if (hour === targetHour) continue;
         console.log(`   🔄 嘗試 ${hour}:00 ...`);
@@ -588,49 +568,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// ✅ 繪製彩色圓圈（彩色版）
-// ==========================================
-function drawColoredCircle(image, x, y, color, radius = 22) {
-  return new Promise((resolve) => {
-    try {
-      const size = radius * 2;
-      
-      const colorMap = {
-        '#FF0000': 0xFF0000FF,
-        '#FF8C00': 0xFF8C00FF,
-        '#FFD700': 0xFFD700FF,
-        '#00CC00': 0x00CC00FF,
-        '#CCCCCC': 0xCCCCCCFF
-      };
-      
-      let fillColor = colorMap[color] || 0xCCCCCCFF;
-      
-      const circle = new Jimp(size, size, 0x00000000);
-      
-      for (let py = 0; py < size; py++) {
-        for (let px = 0; px < size; px++) {
-          const dx = px - radius;
-          const dy = py - radius;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          
-          if (dist <= radius) {
-            circle.setPixelColor(fillColor, px, py);
-          }
-        }
-      }
-      
-      image.composite(circle, x - radius, y - radius);
-      resolve();
-      
-    } catch (error) {
-      console.error('❌ drawColoredCircle 錯誤:', error);
-      resolve();
-    }
-  });
-}
-
-// ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（彩色圓圈版）
+// ✅ 使用 Jimp 生成第一頁圖片
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -638,57 +576,58 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     console.log(`📅 日期: ${day0Label} | ${day1Label}`);
     console.log(`🕐 資料時間: ${dataTimeStr}`);
     
+    // 載入模板
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    const font = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
+    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
+    // ✅ 寫入日期
     image.print(font, 510, 185, day0Label);
     image.print(font, 800, 185, day1Label);
     
+    // ✅ 寫入城市燈號
     const cityConfigs = [
-      { name: '台北市', l1x: 535, l1y: 295, l2x: 825, l2y: 295 },
-      { name: '新北市', l1x: 535, l1y: 392, l2x: 825, l2y: 392 },
-      { name: '桃園市', l1x: 535, l1y: 489, l2x: 825, l2y: 489 },
-      { name: '台中市', l1x: 535, l1y: 586, l2x: 825, l2y: 586 },
-      { name: '台南市', l1x: 535, l1y: 683, l2x: 825, l2y: 683 },
-      { name: '高雄市', l1x: 535, l1y: 780, l2x: 825, l2y: 780 }
+      { name: '台北市', l1x: 510, l1y: 275, l2x: 800, l2y: 275 },
+      { name: '新北市', l1x: 510, l1y: 372, l2x: 800, l2y: 372 },
+      { name: '桃園市', l1x: 510, l1y: 469, l2x: 800, l2y: 469 },
+      { name: '台中市', l1x: 510, l1y: 566, l2x: 800, l2y: 566 },
+      { name: '台南市', l1x: 510, l1y: 663, l2x: 800, l2y: 663 },
+      { name: '高雄市', l1x: 510, l1y: 760, l2x: 800, l2y: 760 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
-      const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
+      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
+      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
       
-      await drawColoredCircle(image, c.l1x, c.l1y, color1, 22);
-      await drawColoredCircle(image, c.l2x, c.l2y, color2, 22);
+      image.print(font, c.l1x, c.l1y, emoji1);
+      image.print(font, c.l2x, c.l2y, emoji2);
       
-      const name1 = data.day0 && data.day0.light ? data.day0.light.name : '無資料';
-      const name2 = data.day1 && data.day1.light ? data.day1.light.name : '無資料';
-      console.log(`🔍 ${c.name}: 燈號寫入 -> ${name1}(${color1}) | ${name2}(${color2})`);
+      console.log(`🔍 ${c.name}: 燈號寫入 -> ${emoji1} | ${emoji2}`);
     }
     
-    const displayTime = dataTimeStr || '2026-07-25 14:00:00';
+    // ✅ 寫入資料時間
+    const displayTime = dataTimeStr || '2026-07-24 14:00:00';
     image.print(font, 450, 870, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
-    console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
     return buffer;
     
   } catch (error) {
     console.error('❌ 生成圖片失敗:', error.message);
-    console.error('   錯誤堆疊:', error.stack);
     return null;
   }
 }
 
 // ==========================================
-// ✅ 產生第一頁圖片訊息
+// ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
 async function generatePage1ImageFlex(startOffset = 0) {
   try {
+    // 計算燈號數據
     const citiesData = [];
     let globalDataTime = null;
     
@@ -703,12 +642,14 @@ async function generatePage1ImageFlex(startOffset = 0) {
       }
     }
     
+    // ✅ 確保 globalDataTime 有值，並格式化為純日期時間
     if (!globalDataTime) {
       const now = new Date();
       const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
       globalDataTime = dateStr;
       console.log(`⚠️ 使用備用時間: ${globalDataTime}`);
     } else {
+      // ✅ 移除 +08:00 時區標示，只保留日期時間
       const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
       const parts = cleanTime.split(' ');
       if (parts.length > 0) {
@@ -723,19 +664,25 @@ async function generatePage1ImageFlex(startOffset = 0) {
       }
     }
     
-    const taiwanNow = getTaiwanTime();
-    const baseDate = new Date(taiwanNow);
-    baseDate.setDate(baseDate.getDate() + startOffset);
+    // 取得日期
+    let day0Label = '日期1';
+    let day1Label = '日期2';
+    if (globalDataTime) {
+      const parts = globalDataTime.split(' ');
+      if (parts.length > 0) {
+        const dateParts = parts[0].split('-');
+        if (dateParts.length === 3) {
+          const month = parseInt(dateParts[1]);
+          const day = parseInt(dateParts[2]);
+          day0Label = `${month}/${day}`;
+          const d = new Date(parseInt(dateParts[0]), month - 1, day);
+          d.setDate(d.getDate() + 1);
+          day1Label = `${d.getMonth()+1}/${d.getDate()}`;
+        }
+      }
+    }
     
-    const d0 = new Date(baseDate);
-    const d1 = new Date(baseDate);
-    d1.setDate(d1.getDate() + 1);
-    
-    const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
-    const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
-    
-    console.log(`📅 圖片日期: ${day0Label} | ${day1Label} (offset=${startOffset})`);
-    
+    // 生成圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime);
     if (!imageBuffer) {
       return {
@@ -745,6 +692,7 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
+    // ✅ 儲存到 /tmp 目錄
     const filename = `current_page1_${Date.now()}.png`;
     const outputPath = path.join('/tmp', filename);
     fs.writeFileSync(outputPath, imageBuffer);
@@ -862,6 +810,7 @@ async function precomputeAndCache() {
   const startTime = Date.now();
   
   try {
+    // 預先計算數據
     const citiesData = [];
     let globalDataTime = null;
     
@@ -877,17 +826,24 @@ async function precomputeAndCache() {
       }
     }
     
-    const taiwanNow = getTaiwanTime();
-    const baseDate = new Date(taiwanNow);
-    baseDate.setDate(baseDate.getDate() + startOffset);
+    // 取得日期
+    let day0Label = '日期1';
+    let day1Label = '日期2';
+    if (globalDataTime) {
+      const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
+      const parts = cleanTime.split(' ');
+      if (parts.length > 0) {
+        const dateParts = parts[0].split('-');
+        if (dateParts.length === 3) {
+          day0Label = `${parseInt(dateParts[1])}/${parseInt(dateParts[2])}`;
+          const d = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+          d.setDate(d.getDate() + 1);
+          day1Label = `${d.getMonth()+1}/${d.getDate()}`;
+        }
+      }
+    }
     
-    const d0 = new Date(baseDate);
-    const d1 = new Date(baseDate);
-    d1.setDate(d1.getDate() + 1);
-    
-    const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
-    const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
-    
+    // 生成並儲存圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     let page1 = null;
     if (imageBuffer) {
@@ -903,6 +859,7 @@ async function precomputeAndCache() {
       };
     }
     
+    // 如果沒有儲存成功，使用模板圖片
     if (!page1) {
       page1 = {
         type: 'image',
@@ -911,6 +868,7 @@ async function precomputeAndCache() {
       };
     }
     
+    // 第二頁固定圖片
     const page2 = generatePage2ImageFlex();
     
     cachedForecast = { page1, page2 };
@@ -1039,6 +997,7 @@ app.post('/webhook', async (req, res) => {
       
       console.log(`📱 來源: ${sourceType}, ID: ${sourceId}`);
       
+      // 加入群組事件
       if (event.type === 'join') {
         const groupId = event.source?.groupId;
         if (groupId && !groups.includes(groupId)) {
@@ -1057,6 +1016,7 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
+      // 追蹤事件
       if (event.type === 'follow') {
         if (!subscribers.includes(userId)) {
           subscribers.push(userId);
@@ -1074,6 +1034,7 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
+      // 取消追蹤事件
       if (event.type === 'unfollow') {
         const idx = subscribers.indexOf(userId);
         if (idx !== -1) {
@@ -1084,16 +1045,19 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
+      // 訊息事件
       if (event.type === 'message' && event.message.type === 'text') {
         const input = event.message.text.trim();
         console.log(`📱 輸入: "${input}"`);
         
+        // 全域限流檢查
         if (isRateLimited()) {
           console.log(`⚠️ 全域限流觸發，拒絕請求`);
           await replyTextMessage(replyToken, '⚠️ 系統忙碌中，請稍後再試。');
           continue;
         }
         
+        // ⭐ 燈號說明 - 不受使用者限流限制
         if (input === '燈號說明' || input === '說明') {
           const cache = await getCachedForecast();
           if (cache && cache.page2) {
@@ -1105,12 +1069,14 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
+        // 使用者限流檢查
         if (isUserRateLimited(sourceId)) {
           console.log(`⚠️ 使用者限流觸發: ${sourceId}`);
           await replyTextMessage(replyToken, '⚠️ 請稍後再查詢，30秒內只能查詢一次');
           continue;
         }
         
+        // 取消訂閱
         if (input === '取消訂閱') {
           const idx = subscribers.indexOf(userId);
           if (idx !== -1) {
@@ -1123,6 +1089,7 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
+        // 加入訂閱
         if (input === '加入訂閱') {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
@@ -1134,12 +1101,14 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
+        // ⭐ 全台查詢（回覆圖片）
         if (input === '全台' || input === 'ALL') {
           const cache = await getCachedForecast();
           
           if (cache && cache.page1) {
             await replyMessage(replyToken, cache.page1);
           } else {
+            // 即時生成
             const startOffset = calculateStartOffset();
             const imageMsg = await generatePage1ImageFlex(startOffset);
             if (imageMsg) {
@@ -1152,6 +1121,7 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
+        // 群組預設回應
         if (sourceType === 'group') {
           await replyTextMessage(replyToken, 
             `📊 查詢六都皮膚濕度壓力指數\n\n` +
@@ -1160,6 +1130,7 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
+        // 個人用戶預設回應
         const cache = await getCachedForecast();
         if (cache && cache.page1) {
           await replyMessage(replyToken, cache.page1);
@@ -1175,34 +1146,30 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ==========================================
-// ⭐ 每日推播任務（使用 node-cron）
+// 每日推播檢查機制（每分鐘檢查）
 // ==========================================
 let lastPublishDate = null;
 
-cron.schedule('0 7 * * *', async () => {
+function checkAndPublish() {
   const taiwanTime = getTaiwanTime();
-  const today = taiwanTime.toISOString().split('T')[0];
+  const hours = taiwanTime.getUTCHours();
+  const minutes = taiwanTime.getUTCMinutes();
   
-  if (lastPublishDate === today) {
-    console.log(`⚠️ 今日已推播過，跳過`);
-    return;
+  if (hours === 7 && minutes === 0) {
+    const today = taiwanTime.toISOString().split('T')[0];
+    if (lastPublishDate !== today) {
+      console.log(`📅 觸發每日推播 - ${today} 台灣時間 ${hours}:${minutes}`);
+      lastPublishDate = today;
+      dailyPublishTask();
+    }
   }
-  
-  console.log(`\n📅 觸發每日推播 - ${today} 台灣時間 07:00`);
-  lastPublishDate = today;
-  
-  try {
-    console.log(`🔄 推播前更新快取...`);
-    await precomputeAndCache();
-    await dailyPublishTask();
-  } catch (error) {
-    console.error('❌ 每日推播失敗:', error);
-  }
-}, {
-  timezone: "Asia/Taipei"
-});
+}
 
-console.log('🕐 每日推播已設定：每天 07:00 (台灣時間)');
+setInterval(() => {
+  checkAndPublish();
+}, 60 * 1000);
+
+console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
 
 // ==========================================
 // ⭐ 定時預計算任務（06:30）
@@ -1215,18 +1182,7 @@ cron.schedule('30 6 * * *', () => {
 });
 
 console.log('📅 已設定定時預計算任務：每天 06:30 (台灣時間)');
-
-// ==========================================
-// ⭐ 定時 ping 防止 Render 休眠（Free Plan）
-// ==========================================
-const RENDER_URL = process.env.RENDER_URL || BASE_URL;
-
-setInterval(() => {
-  axios.get(`${RENDER_URL}/health`).catch(() => {});
-  console.log(`💓 Ping 健康檢查 - ${new Date().toLocaleString()}`);
-}, 10 * 60 * 1000);
-
-console.log('💓 已設定定時 ping（每 10 分鐘）防止 Render 休眠');
+console.log('📌 06:30 抓取當天 14:00 預報，確保 7:00 推播使用最新資料');
 
 // ==========================================
 // 啟動伺服器
@@ -1248,16 +1204,15 @@ console.log('💓 已設定定時 ping（每 10 分鐘）防止 Render 休眠');
     console.log(`\n🚀 ========================================`);
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
-    console.log(`📡 預報 API：F-D0047-089 (自動找最接近時段)`);
+    console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
     console.log(`⏰ 預計算時間：每天 06:30 (台灣時間)`);
-    console.log(`🕐 每日推播：每天 07:00 (台灣時間) - 使用 node-cron`);
     console.log(`📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始抓取`);
+    console.log(`🕐 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
     console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
     console.log(`👥 群組數量：${groups.length} 個`);
     console.log(`📊 訊息佇列延遲：${messageQueue.delay}ms`);
     console.log(`🛡️  限流：每分鐘 ${rateLimit.maxRequests} 次請求，每人 30 秒冷卻`);
-    console.log(`💓 定時 ping：每 10 分鐘防止休眠`);
     console.log(`========================================\n`);
   });
 })();
