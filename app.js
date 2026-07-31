@@ -619,14 +619,16 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // ✅ 使用大字體印日期
-    const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
+    // ✅ 日期用大字體
+    const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
+    // ✅ 資料時間用小字體
+    const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // ✅ 寫入日期（新座標）
-    image.print(font, 510, 185, day0Label);
-    image.print(font, 800, 185, day1Label);
+    // ✅ 寫入日期（大字體）
+    image.print(fontLarge, 510, 185, day0Label);
+    image.print(fontLarge, 800, 185, day1Label);
     
-    // ✅ 城市燈號位置（新座標）
+    // ✅ 城市燈號位置
     const cityConfigs = [
       { name: '台北市', l1x: 535, l1y: 295, l2x: 825, l2y: 295 },
       { name: '新北市', l1x: 535, l1y: 392, l2x: 825, l2y: 392 },
@@ -640,11 +642,9 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ 取得燈號顏色（不是 Emoji）
       const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
       const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
       
-      // ✅ 繪製彩色圓圈（取代 Emoji）
       await drawColoredCircle(image, c.l1x, c.l1y, color1, 24);
       await drawColoredCircle(image, c.l2x, c.l2y, color2, 24);
       
@@ -653,9 +653,9 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       console.log(`🔍 ${c.name}: 燈號寫入 -> ${name1}(${color1}) | ${name2}(${color2})`);
     }
     
-    // ✅ 寫入資料時間
+    // ✅ 寫入資料時間（小字體 32px）
     const displayTime = dataTimeStr || '2026-07-25 14:00:00';
-    image.print(font, 450, 870, displayTime);
+    image.print(fontSmall, 450, 870, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
@@ -667,7 +667,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
