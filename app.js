@@ -566,7 +566,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（Emoji 燈號）
+// ✅ 使用 Jimp 生成第一頁圖片（彩色圓形符號）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -584,7 +584,15 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     image.print(font, 500, 185, day0Label);
     image.print(font, 800, 185, day1Label);
     
-    // ✅ 寫入城市燈號（Emoji）
+    // ✅ 燈號對照表（Emoji → 文字）
+    const lightMap = {
+      '🟢': '綠',
+      '🟡': '黃',
+      '🟠': '橘',
+      '🔴': '紅'
+    };
+    
+    // ✅ 寫入城市燈號（改為文字）
     const cityConfigs = [
       { name: '台北市', l1x: 500, l1y: 275, l2x: 800, l2y: 275 },
       { name: '新北市', l1x: 500, l1y: 372, l2x: 800, l2y: 372 },
@@ -598,14 +606,16 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ 使用 Emoji 燈號
+      // ✅ 取得燈號文字
       const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
       const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
+      const text1 = lightMap[emoji1] || '?';
+      const text2 = lightMap[emoji2] || '?';
       
-      image.print(font, c.l1x, c.l1y, emoji1);
-      image.print(font, c.l2x, c.l2y, emoji2);
+      image.print(font, c.l1x, c.l1y, text1);
+      image.print(font, c.l2x, c.l2y, text2);
       
-      console.log(`🔍 ${c.name}: 燈號寫入 -> ${emoji1} | ${emoji2}`);
+      console.log(`🔍 ${c.name}: 燈號寫入 -> ${text1} (${emoji1}) | ${text2} (${emoji2})`);
     }
     
     // ✅ 寫入資料時間
@@ -620,7 +630,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
