@@ -1,4 +1,5 @@
 
+
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -13,14 +14,12 @@ app.use(express.json());
 // ==========================================
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/tmp', express.static('/tmp'));
-
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
 const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
-
 
 // ==========================================
 // ✅ 第二張圖（燈號說明）- 使用 Render 靜態圖片
@@ -298,11 +297,11 @@ function getTaiwanDateString(offset = 0) {
 }
 
 function getTaiwanHour() {
-  return getTaiwanTime().getHours();
+  return getTaiwanTime().getUTCHours();
 }
 
 function getTaiwanMinute() {
-  return getTaiwanTime().getMinutes();
+  return getTaiwanTime().getUTCMinutes();
 }
 
 // ==========================================
@@ -566,7 +565,49 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（彩色圓形符號）
+// ✅ 繪製彩色圓圈（取代 Emoji）
+// ==========================================
+function drawColoredCircle(image, x, y, color, radius = 24) {
+  return new Promise((resolve) => {
+    try {
+      const size = radius * 2;
+      
+      const colorMap = {
+        '#FF0000': 0xFF0000FF,
+        '#FF8C00': 0xFF8C00FF,
+        '#FFD700': 0xFFD700FF,
+        '#00CC00': 0x00CC00FF,
+        '#CCCCCC': 0xCCCCCCFF
+      };
+      
+      let fillColor = colorMap[color] || 0xCCCCCCFF;
+      
+      const circle = new Jimp(size, size, 0x00000000);
+      
+      for (let py = 0; py < size; py++) {
+        for (let px = 0; px < size; px++) {
+          const dx = px - radius;
+          const dy = py - radius;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist <= radius) {
+            circle.setPixelColor(fillColor, px, py);
+          }
+        }
+      }
+      
+      image.composite(circle, x - radius, y - radius);
+      resolve();
+      
+    } catch (error) {
+      console.error('❌ drawColoredCircle 錯誤:', error);
+      resolve();
+    }
+  });
+}
+
+// ==========================================
+// ✅ 使用 Jimp 生成第一頁圖片（彩色圓圈版）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -578,58 +619,55 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
+    // ✅ 使用大字體印日期
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
-    // ✅ 寫入日期
-    image.print(font, 500, 185, day0Label);
+    // ✅ 寫入日期（新座標）
+    image.print(font, 510, 185, day0Label);
     image.print(font, 800, 185, day1Label);
     
-    // ✅ 燈號對照表（Emoji → 文字）
-    const lightMap = {
-      '🟢': '綠',
-      '🟡': '黃',
-      '🟠': '橘',
-      '🔴': '紅'
-    };
-    
-    // ✅ 寫入城市燈號（改為文字）
+    // ✅ 城市燈號位置（新座標）
     const cityConfigs = [
-      { name: '台北市', l1x: 500, l1y: 275, l2x: 800, l2y: 275 },
-      { name: '新北市', l1x: 500, l1y: 372, l2x: 800, l2y: 372 },
-      { name: '桃園市', l1x: 500, l1y: 469, l2x: 800, l2y: 469 },
-      { name: '台中市', l1x: 500, l1y: 566, l2x: 800, l2y: 566 },
-      { name: '台南市', l1x: 500, l1y: 663, l2x: 800, l2y: 663 },
-      { name: '高雄市', l1x: 500, l1y: 760, l2x: 800, l2y: 760 }
+      { name: '台北市', l1x: 535, l1y: 295, l2x: 825, l2y: 295 },
+      { name: '新北市', l1x: 535, l1y: 392, l2x: 825, l2y: 392 },
+      { name: '桃園市', l1x: 535, l1y: 489, l2x: 825, l2y: 489 },
+      { name: '台中市', l1x: 535, l1y: 586, l2x: 825, l2y: 586 },
+      { name: '台南市', l1x: 535, l1y: 683, l2x: 825, l2y: 683 },
+      { name: '高雄市', l1x: 535, l1y: 780, l2x: 825, l2y: 780 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
-      // ✅ 取得燈號文字
-      const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
-      const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
-      const text1 = lightMap[emoji1] || '?';
-      const text2 = lightMap[emoji2] || '?';
+      // ✅ 取得燈號顏色（不是 Emoji）
+      const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
+      const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
       
-      image.print(font, c.l1x, c.l1y, text1);
-      image.print(font, c.l2x, c.l2y, text2);
+      // ✅ 繪製彩色圓圈（取代 Emoji）
+      await drawColoredCircle(image, c.l1x, c.l1y, color1, 24);
+      await drawColoredCircle(image, c.l2x, c.l2y, color2, 24);
       
-      console.log(`🔍 ${c.name}: 燈號寫入 -> ${text1} (${emoji1}) | ${text2} (${emoji2})`);
+      const name1 = data.day0 && data.day0.light ? data.day0.light.name : '無資料';
+      const name2 = data.day1 && data.day1.light ? data.day1.light.name : '無資料';
+      console.log(`🔍 ${c.name}: 燈號寫入 -> ${name1}(${color1}) | ${name2}(${color2})`);
     }
     
     // ✅ 寫入資料時間
-    const displayTime = dataTimeStr || '2026-07-24 14:00:00';
+    const displayTime = dataTimeStr || '2026-07-25 14:00:00';
     image.print(font, 450, 870, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
+    console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
     return buffer;
     
   } catch (error) {
     console.error('❌ 生成圖片失敗:', error.message);
+    console.error('   錯誤堆疊:', error.stack);
     return null;
   }
 }
+
 // ==========================================
 // ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
 // ==========================================
