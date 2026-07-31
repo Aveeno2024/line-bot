@@ -1230,6 +1230,18 @@ console.log('📅 已設定定時預計算任務：每天 06:30 (台灣時間)')
 console.log('📌 06:30 抓取當天 14:00 預報，確保 7:00 推播使用最新資料');
 
 // ==========================================
+// ⭐ 定時 ping 防止 Render 休眠（Free Plan）
+// ==========================================
+const RENDER_URL = process.env.RENDER_URL || BASE_URL;
+
+setInterval(() => {
+  axios.get(`${RENDER_URL}/health`).catch(() => {});
+  console.log(`💓 Ping 健康檢查 - ${new Date().toLocaleString()}`);
+}, 5 * 60 * 1000);
+
+console.log('💓 已設定定時 ping（每 5 分鐘）防止 Render 休眠');
+
+// ==========================================
 // 啟動伺服器
 // ==========================================
 (async () => {
@@ -1258,6 +1270,7 @@ console.log('📌 06:30 抓取當天 14:00 預報，確保 7:00 推播使用最�
     console.log(`👥 群組數量：${groups.length} 個`);
     console.log(`📊 訊息佇列延遲：${messageQueue.delay}ms`);
     console.log(`🛡️  限流：每分鐘 ${rateLimit.maxRequests} 次請求，每人 30 秒冷卻`);
+    console.log(`💓 定時 ping：每 5 分鐘防止休眠`);
     console.log(`========================================\n`);
   });
 })();
