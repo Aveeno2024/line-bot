@@ -21,6 +21,7 @@ const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yp
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
+
 // ==========================================
 // ✅ 第二張圖（燈號說明）- 使用 Render 靜態圖片
 // ==========================================
@@ -281,13 +282,11 @@ function calculateSHPI(tempOut, humOut) {
 // ✅ 台灣時間工具函數
 // ==========================================
 
-// 1️⃣ 先定義 getTaiwanTime（基礎函數）
 function getTaiwanTime() {
   const now = new Date();
   return new Date(now.getTime() + 8 * 60 * 60 * 1000);
 }
 
-// 2️⃣ 再定義 getTaiwanDateString（使用 getTaiwanTime）
 function getTaiwanDateString(offset = 0) {
   const taiwanTime = getTaiwanTime();
   const targetDate = new Date(taiwanTime);
@@ -298,7 +297,6 @@ function getTaiwanDateString(offset = 0) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-// 3️⃣ 最後定義 getTaiwanHour 和 getTaiwanMinute（使用 getTaiwanTime）
 function getTaiwanHour() {
   return getTaiwanTime().getHours();
 }
@@ -568,7 +566,7 @@ function getDateString(offset = 0) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片
+// ✅ 使用 Jimp 生成第一頁圖片（Emoji 燈號）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
   try {
@@ -583,23 +581,24 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     const font = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     
     // ✅ 寫入日期
-    image.print(font, 510, 185, day0Label);
+    image.print(font, 500, 185, day0Label);
     image.print(font, 800, 185, day1Label);
     
-    // ✅ 寫入城市燈號
+    // ✅ 寫入城市燈號（Emoji）
     const cityConfigs = [
-      { name: '台北市', l1x: 510, l1y: 275, l2x: 800, l2y: 275 },
-      { name: '新北市', l1x: 510, l1y: 372, l2x: 800, l2y: 372 },
-      { name: '桃園市', l1x: 510, l1y: 469, l2x: 800, l2y: 469 },
-      { name: '台中市', l1x: 510, l1y: 566, l2x: 800, l2y: 566 },
-      { name: '台南市', l1x: 510, l1y: 663, l2x: 800, l2y: 663 },
-      { name: '高雄市', l1x: 510, l1y: 760, l2x: 800, l2y: 760 }
+      { name: '台北市', l1x: 500, l1y: 275, l2x: 800, l2y: 275 },
+      { name: '新北市', l1x: 500, l1y: 372, l2x: 800, l2y: 372 },
+      { name: '桃園市', l1x: 500, l1y: 469, l2x: 800, l2y: 469 },
+      { name: '台中市', l1x: 500, l1y: 566, l2x: 800, l2y: 566 },
+      { name: '台南市', l1x: 500, l1y: 663, l2x: 800, l2y: 663 },
+      { name: '高雄市', l1x: 500, l1y: 760, l2x: 800, l2y: 760 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
       const c = cityConfigs[i];
       const data = citiesData[i] || {};
       
+      // ✅ 使用 Emoji 燈號
       const emoji1 = data.day0 && data.day0.light ? data.day0.light.emoji : '?';
       const emoji2 = data.day1 && data.day1.light ? data.day1.light.emoji : '?';
       
@@ -1199,7 +1198,7 @@ console.log('📌 06:30 抓取當天 14:00 預報，確保 7:00 推播使用最�
     await precomputeAndCache();
   }
   
-  const PORT = process.env.PORT || 3000;
+  const PORT = process.env.PORT || 10000;
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 ========================================`);
     console.log(`✅ Server running on port ${PORT}`);
