@@ -1,5 +1,4 @@
 
-
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -14,6 +13,7 @@ app.use(express.json());
 // ==========================================
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/tmp', express.static('/tmp'));
+
 // ==========================================
 // ⚠️ 請填入你的金鑰 ⚠️
 // ==========================================
@@ -615,20 +615,15 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     console.log(`📅 日期: ${day0Label} | ${day1Label}`);
     console.log(`🕐 資料時間: ${dataTimeStr}`);
     
-    // 載入模板
     const templatePath = path.join(__dirname, 'public/images/template_page1.png');
     const image = await Jimp.read(templatePath);
     
-    // ✅ 日期用大字體
     const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
-    // ✅ 資料時間用小字體
     const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // ✅ 寫入日期（大字體）
     image.print(fontLarge, 510, 185, day0Label);
     image.print(fontLarge, 800, 185, day1Label);
     
-    // ✅ 城市燈號位置
     const cityConfigs = [
       { name: '台北市', l1x: 535, l1y: 295, l2x: 825, l2y: 295 },
       { name: '新北市', l1x: 535, l1y: 392, l2x: 825, l2y: 392 },
@@ -653,7 +648,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       console.log(`🔍 ${c.name}: 燈號寫入 -> ${name1}(${color1}) | ${name2}(${color2})`);
     }
     
-    // ✅ 寫入資料時間（小字體 32px）
     const displayTime = dataTimeStr || '2026-07-25 14:00:00';
     image.print(fontSmall, 450, 870, displayTime);
     
@@ -667,12 +661,12 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
     return null;
   }
 }
+
 // ==========================================
-// ✅ 產生第一頁圖片訊息（使用 Render /tmp 目錄）
+// ✅ 產生第一頁圖片訊息（固定檔名版本）
 // ==========================================
 async function generatePage1ImageFlex(startOffset = 0) {
   try {
-    // 計算燈號數據
     const citiesData = [];
     let globalDataTime = null;
     
@@ -687,14 +681,12 @@ async function generatePage1ImageFlex(startOffset = 0) {
       }
     }
     
-    // ✅ 確保 globalDataTime 有值，並格式化為純日期時間
     if (!globalDataTime) {
       const now = new Date();
       const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
       globalDataTime = dateStr;
       console.log(`⚠️ 使用備用時間: ${globalDataTime}`);
     } else {
-      // ✅ 移除 +08:00 時區標示，只保留日期時間
       const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
       const parts = cleanTime.split(' ');
       if (parts.length > 0) {
@@ -709,25 +701,19 @@ async function generatePage1ImageFlex(startOffset = 0) {
       }
     }
     
-    // 取得日期
-    let day0Label = '日期1';
-    let day1Label = '日期2';
-    if (globalDataTime) {
-      const parts = globalDataTime.split(' ');
-      if (parts.length > 0) {
-        const dateParts = parts[0].split('-');
-        if (dateParts.length === 3) {
-          const month = parseInt(dateParts[1]);
-          const day = parseInt(dateParts[2]);
-          day0Label = `${month}/${day}`;
-          const d = new Date(parseInt(dateParts[0]), month - 1, day);
-          d.setDate(d.getDate() + 1);
-          day1Label = `${d.getMonth()+1}/${d.getDate()}`;
-        }
-      }
-    }
+    const taiwanNow = getTaiwanTime();
+    const baseDate = new Date(taiwanNow);
+    baseDate.setDate(baseDate.getDate() + startOffset);
     
-    // 生成圖片
+    const d0 = new Date(baseDate);
+    const d1 = new Date(baseDate);
+    d1.setDate(d1.getDate() + 1);
+    
+    const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
+    const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
+    
+    console.log(`📅 圖片日期: ${day0Label} | ${day1Label} (offset=${startOffset})`);
+    
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime);
     if (!imageBuffer) {
       return {
@@ -737,11 +723,11 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 儲存到 /tmp 目錄
-    const filename = `current_page1_${Date.now()}.png`;
+    // ✅ 固定檔名（供 n8n 抓取）
+    const filename = `current_page1.png`;
     const outputPath = path.join('/tmp', filename);
     fs.writeFileSync(outputPath, imageBuffer);
-    console.log(`✅ 圖片已儲存到 /tmp/${filename}`);
+    console.log(`✅ 圖片已儲存到 /tmp/${filename}（固定檔名）`);
     
     return {
       type: 'image',
@@ -855,7 +841,6 @@ async function precomputeAndCache() {
   const startTime = Date.now();
   
   try {
-    // 預先計算數據
     const citiesData = [];
     let globalDataTime = null;
     
@@ -871,31 +856,25 @@ async function precomputeAndCache() {
       }
     }
     
-    // 取得日期
-    let day0Label = '日期1';
-    let day1Label = '日期2';
-    if (globalDataTime) {
-      const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
-      const parts = cleanTime.split(' ');
-      if (parts.length > 0) {
-        const dateParts = parts[0].split('-');
-        if (dateParts.length === 3) {
-          day0Label = `${parseInt(dateParts[1])}/${parseInt(dateParts[2])}`;
-          const d = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
-          d.setDate(d.getDate() + 1);
-          day1Label = `${d.getMonth()+1}/${d.getDate()}`;
-        }
-      }
-    }
+    const taiwanNow = getTaiwanTime();
+    const baseDate = new Date(taiwanNow);
+    baseDate.setDate(baseDate.getDate() + startOffset);
     
-    // 生成並儲存圖片
+    const d0 = new Date(baseDate);
+    const d1 = new Date(baseDate);
+    d1.setDate(d1.getDate() + 1);
+    
+    const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
+    const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
+    
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
     let page1 = null;
     if (imageBuffer) {
-      const filename = `current_page1_${Date.now()}.png`;
+      // ✅ 固定檔名（供 n8n 抓取）
+      const filename = `current_page1.png`;
       const outputPath = path.join('/tmp', filename);
       fs.writeFileSync(outputPath, imageBuffer);
-      console.log(`✅ 快取圖片已儲存到 /tmp/${filename}`);
+      console.log(`✅ 快取圖片已儲存到 /tmp/${filename}（固定檔名）`);
       
       page1 = {
         type: 'image',
@@ -904,7 +883,6 @@ async function precomputeAndCache() {
       };
     }
     
-    // 如果沒有儲存成功，使用模板圖片
     if (!page1) {
       page1 = {
         type: 'image',
@@ -913,7 +891,6 @@ async function precomputeAndCache() {
       };
     }
     
-    // 第二頁固定圖片
     const page2 = generatePage2ImageFlex();
     
     cachedForecast = { page1, page2 };
@@ -1042,7 +1019,6 @@ app.post('/webhook', async (req, res) => {
       
       console.log(`📱 來源: ${sourceType}, ID: ${sourceId}`);
       
-      // 加入群組事件
       if (event.type === 'join') {
         const groupId = event.source?.groupId;
         if (groupId && !groups.includes(groupId)) {
@@ -1061,7 +1037,6 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 追蹤事件
       if (event.type === 'follow') {
         if (!subscribers.includes(userId)) {
           subscribers.push(userId);
@@ -1079,7 +1054,6 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 取消追蹤事件
       if (event.type === 'unfollow') {
         const idx = subscribers.indexOf(userId);
         if (idx !== -1) {
@@ -1090,19 +1064,16 @@ app.post('/webhook', async (req, res) => {
         continue;
       }
       
-      // 訊息事件
       if (event.type === 'message' && event.message.type === 'text') {
         const input = event.message.text.trim();
         console.log(`📱 輸入: "${input}"`);
         
-        // 全域限流檢查
         if (isRateLimited()) {
           console.log(`⚠️ 全域限流觸發，拒絕請求`);
           await replyTextMessage(replyToken, '⚠️ 系統忙碌中，請稍後再試。');
           continue;
         }
         
-        // ⭐ 燈號說明 - 不受使用者限流限制
         if (input === '燈號說明' || input === '說明') {
           const cache = await getCachedForecast();
           if (cache && cache.page2) {
@@ -1114,14 +1085,12 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 使用者限流檢查
         if (isUserRateLimited(sourceId)) {
           console.log(`⚠️ 使用者限流觸發: ${sourceId}`);
           await replyTextMessage(replyToken, '⚠️ 請稍後再查詢，30秒內只能查詢一次');
           continue;
         }
         
-        // 取消訂閱
         if (input === '取消訂閱') {
           const idx = subscribers.indexOf(userId);
           if (idx !== -1) {
@@ -1134,7 +1103,6 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 加入訂閱
         if (input === '加入訂閱') {
           if (!subscribers.includes(userId)) {
             subscribers.push(userId);
@@ -1146,14 +1114,12 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // ⭐ 全台查詢（回覆圖片）
         if (input === '全台' || input === 'ALL') {
           const cache = await getCachedForecast();
           
           if (cache && cache.page1) {
             await replyMessage(replyToken, cache.page1);
           } else {
-            // 即時生成
             const startOffset = calculateStartOffset();
             const imageMsg = await generatePage1ImageFlex(startOffset);
             if (imageMsg) {
@@ -1166,7 +1132,6 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 群組預設回應
         if (sourceType === 'group') {
           await replyTextMessage(replyToken, 
             `📊 查詢六都皮膚濕度壓力指數\n\n` +
@@ -1175,7 +1140,6 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // 個人用戶預設回應
         const cache = await getCachedForecast();
         if (cache && cache.page1) {
           await replyMessage(replyToken, cache.page1);
@@ -1230,16 +1194,16 @@ console.log('📅 已設定定時預計算任務：每天 06:30 (台灣時間)')
 console.log('📌 06:30 抓取當天 14:00 預報，確保 7:00 推播使用最新資料');
 
 // ==========================================
-// ⭐ 定時 ping 防止 Render 休眠（Free Plan）
+// ⭐ 定時 ping 防止 Render 休眠
 // ==========================================
 const RENDER_URL = process.env.RENDER_URL || BASE_URL;
 
 setInterval(() => {
   axios.get(`${RENDER_URL}/health`).catch(() => {});
   console.log(`💓 Ping 健康檢查 - ${new Date().toLocaleString()}`);
-}, 5 * 60 * 1000);
+}, 10 * 60 * 1000);
 
-console.log('💓 已設定定時 ping（每 5 分鐘）防止 Render 休眠');
+console.log('💓 已設定定時 ping（每 10 分鐘）防止 Render 休眠');
 
 // ==========================================
 // 啟動伺服器
@@ -1261,16 +1225,16 @@ console.log('💓 已設定定時 ping（每 5 分鐘）防止 Render 休眠');
     console.log(`\n🚀 ========================================`);
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
-    console.log(`📡 預報 API：F-D0047-089 (取樣: 下午2點)`);
+    console.log(`📡 預報 API：F-D0047-089 (自動找最接近時段)`);
     console.log(`⏰ 預計算時間：每天 06:30 (台灣時間)`);
+    console.log(`🕐 每日推播：每天 07:00 (台灣時間) - 使用 node-cron`);
     console.log(`📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始抓取`);
-    console.log(`🕐 每日推播：上午 7:00 (台灣時間) - 每分鐘檢查`);
     console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
     console.log(`👥 群組數量：${groups.length} 個`);
     console.log(`📊 訊息佇列延遲：${messageQueue.delay}ms`);
     console.log(`🛡️  限流：每分鐘 ${rateLimit.maxRequests} 次請求，每人 30 秒冷卻`);
-    console.log(`💓 定時 ping：每 5 分鐘防止休眠`);
+    console.log(`💓 定時 ping：每 10 分鐘防止休眠`);
     console.log(`========================================\n`);
   });
 })();
