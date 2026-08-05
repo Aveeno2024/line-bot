@@ -596,7 +596,7 @@ function drawColoredCircle(image, x, y, color, radius = 24) {
 }
 
 // ==========================================
-// ✅ 生成圖片（支援 LINE 和 FB 版本）
+// ✅ 生成圖片（支援 LINE 和 FB 版本，分開座標）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr, version = 'line') {
   try {
@@ -614,18 +614,43 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // ✅ 寫入日期（根據新模板座標）
-    image.print(fontLarge, 560, 200, day0Label);
-    image.print(fontLarge, 900, 200, day1Label);
+    // ✅ 根據版本設定座標
+    let date1X, date1Y, date2X, date2Y;
+    let lightX, lightYOffset;
+    let timeX, timeY;
     
-    // ✅ 城市燈號位置（根據新模板座標）
+    if (version === 'fb') {
+      // Facebook 版座標
+      date1X = 500;
+      date1Y = 150;
+      date2X = 840;
+      date2Y = 150;
+      lightX = 510;
+      timeX = 680;
+      timeY = 1440;
+    } else {
+      // LINE 版座標
+      date1X = 510;
+      date1Y = 160;
+      date2X = 850;
+      date2Y = 160;
+      lightX = 530;
+      timeX = 380;
+      timeY = 1560;
+    }
+    
+    // ✅ 寫入日期
+    image.print(fontLarge, date1X, date1Y, day0Label);
+    image.print(fontLarge, date2X, date2Y, day1Label);
+    
+    // ✅ 城市燈號位置
     const cityConfigs = [
-      { name: '台北市', l1x: 560, l1y: 300, l2x: 900, l2y: 300 },
-      { name: '新北市', l1x: 560, l1y: 400, l2x: 900, l2y: 400 },
-      { name: '桃園市', l1x: 560, l1y: 500, l2x: 900, l2y: 500 },
-      { name: '台中市', l1x: 560, l1y: 600, l2x: 900, l2y: 600 },
-      { name: '台南市', l1x: 560, l1y: 700, l2x: 900, l2y: 700 },
-      { name: '高雄市', l1x: 560, l1y: 800, l2x: 900, l2y: 800 }
+      { name: '台北市', l1y: 300, l2y: 300 },
+      { name: '新北市', l1y: 400, l2y: 400 },
+      { name: '桃園市', l1y: 500, l2y: 500 },
+      { name: '台中市', l1y: 600, l2y: 600 },
+      { name: '台南市', l1y: 700, l2y: 700 },
+      { name: '高雄市', l1y: 800, l2y: 800 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
@@ -635,8 +660,10 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
       const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
       const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
       
-      await drawColoredCircle(image, c.l1x, c.l1y, color1, 24);
-      await drawColoredCircle(image, c.l2x, c.l2y, color2, 24);
+      // 燈號1：使用 lightX，Y 不變
+      await drawColoredCircle(image, lightX, c.l1y, color1, 24);
+      // 燈號2：使用 lightX + 340（對應日期2的偏移）
+      await drawColoredCircle(image, lightX + 340, c.l2y, color2, 24);
       
       const name1 = data.day0 && data.day0.light ? data.day0.light.name : '無資料';
       const name2 = data.day1 && data.day1.light ? data.day1.light.name : '無資料';
@@ -645,7 +672,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     
     // ✅ 寫入資料時間
     const displayTime = dataTimeStr || '2026-07-25 14:00:00';
-    image.print(fontSmall, 580, 1500, displayTime);
+    image.print(fontSmall, timeX, timeY, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
@@ -657,7 +684,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生圖片訊息（支援 LINE 和 FB 版本）
 // ==========================================
