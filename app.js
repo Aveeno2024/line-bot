@@ -618,39 +618,50 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     let date1X, date1Y, date2X, date2Y;
     let lightX, lightYOffset;
     let timeX, timeY;
+    let lightYStart, lightYStep;
     
     if (version === 'fb') {
-      // Facebook 版座標
+      // ===== Facebook 版座標 =====
       date1X = 500;
       date1Y = 150;
       date2X = 840;
       date2Y = 150;
       lightX = 510;
-      timeX = 680;
-      timeY = 1440;
+      lightYStart = 300;
+      lightYStep = 100;
+      timeX = 280;
+      timeY = 1500;
     } else {
-      // LINE 版座標
-      date1X = 510;
-      date1Y = 160;
-      date2X = 850;
-      date2Y = 160;
-      lightX = 530;
-      timeX = 380;
-      timeY = 1560;
+      // ===== LINE 版座標 =====
+      date1X = 540;
+      date1Y = 200;
+      date2X = 870;
+      date2Y = 200;
+      lightX = 560;
+      lightYStart = 280;
+      lightYStep = 100;
+      timeX = 580;
+      timeY = 1500;
     }
     
     // ✅ 寫入日期
     image.print(fontLarge, date1X, date1Y, day0Label);
     image.print(fontLarge, date2X, date2Y, day1Label);
     
-    // ✅ 城市燈號位置
+    // ✅ 城市燈號位置（動態計算 Y）
+    const cityNames = ['台北市', '新北市', '桃園市', '台中市', '台南市', '高雄市'];
+    const lightYPositions = [];
+    for (let i = 0; i < cityNames.length; i++) {
+      lightYPositions.push(lightYStart + i * lightYStep);
+    }
+    
     const cityConfigs = [
-      { name: '台北市', l1y: 300, l2y: 300 },
-      { name: '新北市', l1y: 400, l2y: 400 },
-      { name: '桃園市', l1y: 500, l2y: 500 },
-      { name: '台中市', l1y: 600, l2y: 600 },
-      { name: '台南市', l1y: 700, l2y: 700 },
-      { name: '高雄市', l1y: 800, l2y: 800 }
+      { name: '台北市', l1y: lightYPositions[0], l2y: lightYPositions[0] },
+      { name: '新北市', l1y: lightYPositions[1], l2y: lightYPositions[1] },
+      { name: '桃園市', l1y: lightYPositions[2], l2y: lightYPositions[2] },
+      { name: '台中市', l1y: lightYPositions[3], l2y: lightYPositions[3] },
+      { name: '台南市', l1y: lightYPositions[4], l2y: lightYPositions[4] },
+      { name: '高雄市', l1y: lightYPositions[5], l2y: lightYPositions[5] }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
@@ -660,10 +671,11 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
       const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
       const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
       
-      // 燈號1：使用 lightX，Y 不變
+      // 燈號1 和 燈號2 使用相同的 lightX（日期1和日期2的X位置不同）
+      const light2X = lightX + (date2X - date1X);
+      
       await drawColoredCircle(image, lightX, c.l1y, color1, 24);
-      // 燈號2：使用 lightX + 340（對應日期2的偏移）
-      await drawColoredCircle(image, lightX + 340, c.l2y, color2, 24);
+      await drawColoredCircle(image, light2X, c.l2y, color2, 24);
       
       const name1 = data.day0 && data.day0.light ? data.day0.light.name : '無資料';
       const name2 = data.day1 && data.day1.light ? data.day1.light.name : '無資料';
