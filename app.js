@@ -21,18 +21,7 @@ const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yp
 const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 // ==========================================
 
-// ==========================================
-// ✅ 第二張圖（燈號說明）- 使用 Render 靜態圖片
-// ==========================================
 const BASE_URL = 'https://line-bot-v9q8.onrender.com';
-
-function generatePage2ImageFlex() {
-  return {
-    type: 'image',
-    originalContentUrl: `${BASE_URL}/images/template_page2.png`,
-    previewImageUrl: `${BASE_URL}/images/template_page2.png`
-  };
-}
 
 // GitHub 設定 (可選)
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -607,30 +596,36 @@ function drawColoredCircle(image, x, y, color, radius = 24) {
 }
 
 // ==========================================
-// ✅ 使用 Jimp 生成第一頁圖片（彩色圓圈版）
+// ✅ 生成圖片（支援 LINE 和 FB 版本）
 // ==========================================
-async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr) {
+async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr, version = 'line') {
   try {
-    console.log(`\n📊 開始生成圖片...`);
+    console.log(`\n📊 開始生成圖片... (版本: ${version})`);
     console.log(`📅 日期: ${day0Label} | ${day1Label}`);
     console.log(`🕐 資料時間: ${dataTimeStr}`);
     
-    const templatePath = path.join(__dirname, 'public/images/template_page1.png');
+    // 根據版本選擇不同的模板
+    const templateFile = version === 'fb' 
+      ? 'template_page1_fb.png' 
+      : 'template_page1.png';
+    const templatePath = path.join(__dirname, 'public/images', templateFile);
     const image = await Jimp.read(templatePath);
     
     const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    image.print(fontLarge, 510, 185, day0Label);
-    image.print(fontLarge, 800, 185, day1Label);
+    // ✅ 寫入日期（根據新模板座標）
+    image.print(fontLarge, 560, 200, day0Label);
+    image.print(fontLarge, 900, 200, day1Label);
     
+    // ✅ 城市燈號位置（根據新模板座標）
     const cityConfigs = [
-      { name: '台北市', l1x: 535, l1y: 295, l2x: 825, l2y: 295 },
-      { name: '新北市', l1x: 535, l1y: 392, l2x: 825, l2y: 392 },
-      { name: '桃園市', l1x: 535, l1y: 489, l2x: 825, l2y: 489 },
-      { name: '台中市', l1x: 535, l1y: 586, l2x: 825, l2y: 586 },
-      { name: '台南市', l1x: 535, l1y: 683, l2x: 825, l2y: 683 },
-      { name: '高雄市', l1x: 535, l1y: 780, l2x: 825, l2y: 780 }
+      { name: '台北市', l1x: 560, l1y: 300, l2x: 900, l2y: 300 },
+      { name: '新北市', l1x: 560, l1y: 400, l2x: 900, l2y: 400 },
+      { name: '桃園市', l1x: 560, l1y: 500, l2x: 900, l2y: 500 },
+      { name: '台中市', l1x: 560, l1y: 600, l2x: 900, l2y: 600 },
+      { name: '台南市', l1x: 560, l1y: 700, l2x: 900, l2y: 700 },
+      { name: '高雄市', l1x: 560, l1y: 800, l2x: 900, l2y: 800 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
@@ -648,8 +643,9 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
       console.log(`🔍 ${c.name}: 燈號寫入 -> ${name1}(${color1}) | ${name2}(${color2})`);
     }
     
+    // ✅ 寫入資料時間
     const displayTime = dataTimeStr || '2026-07-25 14:00:00';
-    image.print(fontSmall, 450, 870, displayTime);
+    image.print(fontSmall, 580, 1500, displayTime);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
@@ -663,9 +659,9 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr)
 }
 
 // ==========================================
-// ✅ 產生第一頁圖片訊息（固定檔名版本）
+// ✅ 產生圖片訊息（支援 LINE 和 FB 版本）
 // ==========================================
-async function generatePage1ImageFlex(startOffset = 0) {
+async function generatePage1ImageFlex(startOffset = 0, version = 'line') {
   try {
     const citiesData = [];
     let globalDataTime = null;
@@ -714,7 +710,7 @@ async function generatePage1ImageFlex(startOffset = 0) {
     
     console.log(`📅 圖片日期: ${day0Label} | ${day1Label} (offset=${startOffset})`);
     
-    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime);
+    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, version);
     if (!imageBuffer) {
       return {
         type: 'image',
@@ -723,11 +719,11 @@ async function generatePage1ImageFlex(startOffset = 0) {
       };
     }
     
-    // ✅ 固定檔名（供 n8n 抓取）
-    const filename = `current_page1.png`;
+    // ✅ 根據版本決定檔名
+    const filename = version === 'fb' ? 'current_page1_fb.png' : 'current_page1.png';
     const outputPath = path.join('/tmp', filename);
     fs.writeFileSync(outputPath, imageBuffer);
-    console.log(`✅ 圖片已儲存到 /tmp/${filename}（固定檔名）`);
+    console.log(`✅ 圖片已儲存到 /tmp/${filename}`);
     
     return {
       type: 'image',
@@ -746,23 +742,9 @@ async function generatePage1ImageFlex(startOffset = 0) {
 }
 
 // ==========================================
-// ✅ 產生第二頁圖片訊息（固定圖片）
-// ==========================================
-function generatePage2ImageFlex() {
-  return {
-    type: 'image',
-    originalContentUrl: `${BASE_URL}/images/template_page2.png`,
-    previewImageUrl: `${BASE_URL}/images/template_page2.png`
-  };
-}
-
-// ==========================================
 // 錯誤訊息 Flex Message
 // ==========================================
 function getErrorFlexMessage() {
-  const today = getDateString(0);
-  const tomorrow = getDateString(1);
-  
   return {
     type: 'flex',
     altText: '⚠️ 中央氣象署 API 暫時無法連線',
@@ -867,31 +849,30 @@ async function precomputeAndCache() {
     const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
     const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
     
-    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '');
-    let page1 = null;
-    if (imageBuffer) {
-      // ✅ 固定檔名（供 n8n 抓取）
-      const filename = `current_page1.png`;
-      const outputPath = path.join('/tmp', filename);
-      fs.writeFileSync(outputPath, imageBuffer);
-      console.log(`✅ 快取圖片已儲存到 /tmp/${filename}（固定檔名）`);
-      
-      page1 = {
-        type: 'image',
-        originalContentUrl: `${BASE_URL}/tmp/${filename}`,
-        previewImageUrl: `${BASE_URL}/tmp/${filename}`
-      };
-    }
+    // 生成 LINE 版本
+    const imageBufferLine = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '', 'line');
+    const filenameLine = 'current_page1.png';
+    fs.writeFileSync(path.join('/tmp', filenameLine), imageBufferLine);
+    console.log(`✅ LINE 版圖片已儲存: ${filenameLine}`);
     
-    if (!page1) {
-      page1 = {
-        type: 'image',
-        originalContentUrl: `${BASE_URL}/images/template_page1.png`,
-        previewImageUrl: `${BASE_URL}/images/template_page1.png`
-      };
-    }
+    // 生成 Facebook 版本
+    const imageBufferFb = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '', 'fb');
+    const filenameFb = 'current_page1_fb.png';
+    fs.writeFileSync(path.join('/tmp', filenameFb), imageBufferFb);
+    console.log(`✅ FB 版圖片已儲存: ${filenameFb}`);
     
-    const page2 = generatePage2ImageFlex();
+    // 快取使用 LINE 版本
+    const page1 = {
+      type: 'image',
+      originalContentUrl: `${BASE_URL}/tmp/${filenameLine}`,
+      previewImageUrl: `${BASE_URL}/tmp/${filenameLine}`
+    };
+    
+    const page2 = {
+      type: 'image',
+      originalContentUrl: `${BASE_URL}/images/template_page2.png`,
+      previewImageUrl: `${BASE_URL}/images/template_page2.png`
+    };
     
     cachedForecast = { page1, page2 };
     lastCacheTime = new Date();
@@ -1029,8 +1010,8 @@ app.post('/webhook', async (req, res) => {
             `🌡️💧 皮膚濕度壓力指數 Bot 已加入！
 
 📊 使用方式：
-• 輸入「全台」查詢六都2天預報
-• 輸入「燈號說明」查看完整說明
+• 輸入「全台1」查詢六都2天預報（LINE 版）
+• 輸入「全台2」查詢六都2天預報（FB 版）
 
 💡 查詢結果會「直接」在群組中回覆`);
         }
@@ -1074,16 +1055,7 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        if (input === '燈號說明' || input === '說明') {
-          const cache = await getCachedForecast();
-          if (cache && cache.page2) {
-            await replyMessage(replyToken, cache.page2);
-          } else {
-            const imageMsg = generatePage2ImageFlex();
-            await replyMessage(replyToken, imageMsg);
-          }
-          continue;
-        }
+        // ❌ 已移除「燈號說明」功能
         
         if (isUserRateLimited(sourceId)) {
           console.log(`⚠️ 使用者限流觸發: ${sourceId}`);
@@ -1114,14 +1086,15 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        if (input === '全台' || input === 'ALL') {
+        // ✅ 全台1：LINE 版本
+        if (input === '全台1' || input === 'ALL1') {
           const cache = await getCachedForecast();
           
           if (cache && cache.page1) {
             await replyMessage(replyToken, cache.page1);
           } else {
             const startOffset = calculateStartOffset();
-            const imageMsg = await generatePage1ImageFlex(startOffset);
+            const imageMsg = await generatePage1ImageFlex(startOffset, 'line');
             if (imageMsg) {
               await replyMessage(replyToken, imageMsg);
             } else {
@@ -1132,11 +1105,23 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
+        // ✅ 全台2：Facebook 版本
+        if (input === '全台2' || input === 'ALL2') {
+          const startOffset = calculateStartOffset();
+          const imageMsg = await generatePage1ImageFlex(startOffset, 'fb');
+          if (imageMsg) {
+            await replyMessage(replyToken, imageMsg);
+          } else {
+            const errorMsg = getErrorFlexMessage();
+            await replyMessage(replyToken, errorMsg);
+          }
+          continue;
+        }
+        
         if (sourceType === 'group') {
           await replyTextMessage(replyToken, 
             `📊 查詢六都皮膚濕度壓力指數\n\n` +
-            `請輸入「全台」，結果將直接顯示在群組中。\n\n` +
-            `📖 輸入「燈號說明」查看完整介紹`);
+            `請輸入「全台1」或「全台2」，結果將直接顯示在群組中。`);
           continue;
         }
         
