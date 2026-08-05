@@ -1,4 +1,5 @@
 
+
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -616,32 +617,33 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     
     // ✅ 根據版本設定座標
     let date1X, date1Y, date2X, date2Y;
-    let lightX, lightYOffset;
+    let light1X, light2X, lightYStart, lightYStep;
     let timeX, timeY;
-    let lightYStart, lightYStep;
     
     if (version === 'fb') {
       // ===== Facebook 版座標 =====
-      date1X = 500;
-      date1Y = 150;
-      date2X = 840;
-      date2Y = 150;
-      lightX = 510;
-      lightYStart = 300;
-      lightYStep = 100;
-      timeX = 280;
-      timeY = 1500;
-    } else {
-      // ===== LINE 版座標 =====
       date1X = 540;
       date1Y = 200;
-      date2X = 870;
+      date2X = 865;
       date2Y = 200;
-      lightX = 560;
-      lightYStart = 280;
+      light1X = 530;
+      light2X = 855;  // 530 + (865 - 540) = 530 + 325 = 855
+      lightYStart = 300;
       lightYStep = 100;
-      timeX = 580;
-      timeY = 1500;
+      timeX = 630;
+      timeY = 1420;
+    } else {
+      // ===== LINE 版座標 =====
+      date1X = 530;
+      date1Y = 180;
+      date2X = 850;
+      date2Y = 180;
+      light1X = 550;
+      light2X = 875;  // 550 + (850 - 530) = 550 + 320 = 870
+      lightYStart = 310;
+      lightYStep = 100;
+      timeX = 380;
+      timeY = 1570;
     }
     
     // ✅ 寫入日期
@@ -671,10 +673,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
       const color1 = data.day0 && data.day0.light ? data.day0.light.color : '#CCCCCC';
       const color2 = data.day1 && data.day1.light ? data.day1.light.color : '#CCCCCC';
       
-      // 燈號1 和 燈號2 使用相同的 lightX（日期1和日期2的X位置不同）
-      const light2X = lightX + (date2X - date1X);
-      
-      await drawColoredCircle(image, lightX, c.l1y, color1, 24);
+      await drawColoredCircle(image, light1X, c.l1y, color1, 24);
       await drawColoredCircle(image, light2X, c.l2y, color2, 24);
       
       const name1 = data.day0 && data.day0.light ? data.day0.light.name : '無資料';
@@ -697,10 +696,22 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
   }
 }
 // ==========================================
-// ✅ 產生圖片訊息（支援 LINE 和 FB 版本）
+// ✅ 產生圖片訊息（使用快取，不重新計算）
 // ==========================================
-async function generatePage1ImageFlex(startOffset = 0, version = 'line') {
+async function generatePage1ImageFlex(version = 'line') {
   try {
+    // ✅ 直接使用快取，不重新計算
+    const cache = await getCachedForecast();
+    
+    if (cache && cache.page1) {
+      console.log(`📦 使用快取圖片 (版本: ${version})`);
+      return cache.page1;
+    }
+    
+    // ⚠️ 如果快取不存在，才即時計算（備援）
+    console.log(`⚠️ 快取不存在，即時計算 (版本: ${version})`);
+    const startOffset = calculateStartOffset();
+    
     const citiesData = [];
     let globalDataTime = null;
     
@@ -719,7 +730,6 @@ async function generatePage1ImageFlex(startOffset = 0, version = 'line') {
       const now = new Date();
       const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
       globalDataTime = dateStr;
-      console.log(`⚠️ 使用備用時間: ${globalDataTime}`);
     } else {
       const cleanTime = globalDataTime.replace(/\+08:00/g, '').trim();
       const parts = cleanTime.split(' ');
@@ -746,8 +756,6 @@ async function generatePage1ImageFlex(startOffset = 0, version = 'line') {
     const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
     const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
     
-    console.log(`📅 圖片日期: ${day0Label} | ${day1Label} (offset=${startOffset})`);
-    
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, version);
     if (!imageBuffer) {
       return {
@@ -757,7 +765,6 @@ async function generatePage1ImageFlex(startOffset = 0, version = 'line') {
       };
     }
     
-    // ✅ 根據版本決定檔名
     const filename = version === 'fb' ? 'current_page1_fb.png' : 'current_page1.png';
     const outputPath = path.join('/tmp', filename);
     fs.writeFileSync(outputPath, imageBuffer);
@@ -1124,29 +1131,21 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // ✅ 全台1：LINE 版本
+        // ✅ 全台1：LINE 版本（使用快取）
         if (input === '全台1' || input === 'ALL1') {
-          const cache = await getCachedForecast();
-          
-          if (cache && cache.page1) {
-            await replyMessage(replyToken, cache.page1);
+          const imageMsg = await generatePage1ImageFlex('line');
+          if (imageMsg) {
+            await replyMessage(replyToken, imageMsg);
           } else {
-            const startOffset = calculateStartOffset();
-            const imageMsg = await generatePage1ImageFlex(startOffset, 'line');
-            if (imageMsg) {
-              await replyMessage(replyToken, imageMsg);
-            } else {
-              const errorMsg = getErrorFlexMessage();
-              await replyMessage(replyToken, errorMsg);
-            }
+            const errorMsg = getErrorFlexMessage();
+            await replyMessage(replyToken, errorMsg);
           }
           continue;
         }
         
-        // ✅ 全台2：Facebook 版本
+        // ✅ 全台2：Facebook 版本（使用快取）
         if (input === '全台2' || input === 'ALL2') {
-          const startOffset = calculateStartOffset();
-          const imageMsg = await generatePage1ImageFlex(startOffset, 'fb');
+          const imageMsg = await generatePage1ImageFlex('fb');
           if (imageMsg) {
             await replyMessage(replyToken, imageMsg);
           } else {
