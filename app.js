@@ -622,27 +622,27 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     if (version === 'fb') {
       // ===== Facebook 版座標 =====
       date1X = 480;
-      date1Y = 165;
-      date2X = 780;
-      date2Y = 165;
+      date1Y = 160;
+      date2X = 770;
+      date2Y = 160;
       light1X = 520;
       light2X = 800;
       lightYStart = 270;
       lightYStep = 90;
-      timeX = 380;
+      timeX = 370;
       timeY = 1450;
     } else {
       // ===== LINE 版座標 =====
-      date1X = 500;
+      date1X = 505;
       date1Y = 170;
-      date2X = 800;
+      date2X = 805;
       date2Y = 170;
       light1X = 560;
       light2X = 850;
       lightYStart = 300;
       lightYStep = 100;
       timeX = 380;
-      timeY = 1550;
+      timeY = 1560;
     }
     
     // ✅ 寫入日期
