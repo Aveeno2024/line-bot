@@ -596,7 +596,7 @@ function drawColoredCircle(image, x, y, color, radius = 24) {
 }
 
 // ==========================================
-// ✅ 生成圖片（支援 LINE 和 FB 版本）
+// ✅ 生成圖片（支援 LINE 和 FB 版本，分開座標）
 // ==========================================
 async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr, version = 'line') {
   try {
@@ -604,7 +604,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     console.log(`📅 日期: ${day0Label} | ${day1Label}`);
     console.log(`🕐 資料時間: ${dataTimeStr}`);
     
-    // ✅ 根據版本選擇不同的模板
+    // 根據版本選擇不同的模板
     const templateFile = version === 'fb' 
       ? 'template_page1_fb.png' 
       : 'template_page1.png';
@@ -614,30 +614,49 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
     
-    // 統一座標
-    const date1X = 560;
-    const date1Y = 200;
-    const date2X = 900;
-    const date2Y = 200;
-    const light1X = 560;
-    const light2X = 900;
-    const lightYStart = 300;
-    const lightYStep = 100;
-    const timeX = 580;
-    const timeY = 1500;
+    // ✅ 根據版本設定座標
+    let date1X, date1Y, date2X, date2Y;
+    let light1X, light2X, lightYStart, lightYStep;
+    let timeX, timeY;
+    
+    if (version === 'fb') {
+      // ===== Facebook 版座標 =====
+      date1X = 530;
+      date1Y = 170;
+      date2X = 855;
+      date2Y = 170;
+      light1X = 530;
+      light2X = 855;
+      lightYStart = 285;
+      lightYStep = 100;
+      timeX = 730;
+      timeY = 1420;
+    } else {
+      // ===== LINE 版座標 =====
+      date1X = 530;
+      date1Y = 180;
+      date2X = 850;
+      date2Y = 180;
+      light1X = 550;
+      light2X = 870;
+      lightYStart = 300;
+      lightYStep = 100;
+      timeX = 380;
+      timeY = 1570;
+    }
     
     // ✅ 寫入日期
     image.print(fontLarge, date1X, date1Y, day0Label);
     image.print(fontLarge, date2X, date2Y, day1Label);
     
-    // ✅ 城市燈號位置
+    // ✅ 城市燈號位置（動態計算 Y）
     const cityConfigs = [
-      { name: '台北市', l1y: 300, l2y: 300 },
-      { name: '新北市', l1y: 400, l2y: 400 },
-      { name: '桃園市', l1y: 500, l2y: 500 },
-      { name: '台中市', l1y: 600, l2y: 600 },
-      { name: '台南市', l1y: 700, l2y: 700 },
-      { name: '高雄市', l1y: 800, l2y: 800 }
+      { name: '台北市', l1y: lightYStart, l2y: lightYStart },
+      { name: '新北市', l1y: lightYStart + lightYStep, l2y: lightYStart + lightYStep },
+      { name: '桃園市', l1y: lightYStart + lightYStep * 2, l2y: lightYStart + lightYStep * 2 },
+      { name: '台中市', l1y: lightYStart + lightYStep * 3, l2y: lightYStart + lightYStep * 3 },
+      { name: '台南市', l1y: lightYStart + lightYStep * 4, l2y: lightYStart + lightYStep * 4 },
+      { name: '高雄市', l1y: lightYStart + lightYStep * 5, l2y: lightYStart + lightYStep * 5 }
     ];
     
     for (let i = 0; i < cityConfigs.length; i++) {
@@ -669,7 +688,6 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     return null;
   }
 }
-
 // ==========================================
 // ✅ 產生圖片訊息（支援 LINE 和 FB 版本，使用快取）
 // ==========================================
