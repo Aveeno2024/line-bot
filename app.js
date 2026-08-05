@@ -622,13 +622,13 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     if (version === 'fb') {
       // ===== Facebook 版座標 =====
       date1X = 480;
-      date1Y = 170;
+      date1Y = 165;
       date2X = 780;
-      date2Y = 170;
+      date2Y = 165;
       light1X = 520;
       light2X = 800;
       lightYStart = 270;
-      lightYStep = 95;
+      lightYStep = 90;
       timeX = 380;
       timeY = 1450;
     } else {
@@ -642,7 +642,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
       lightYStart = 300;
       lightYStep = 100;
       timeX = 380;
-      timeY = 1450;
+      timeY = 1550;
     }
     
     // ✅ 寫入日期
