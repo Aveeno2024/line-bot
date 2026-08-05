@@ -625,24 +625,24 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
       date1Y = 180;
       date2X = 780;
       date2Y = 180;
-      light1X = 500;
-      light2X = 840;
-      lightYStart = 290;
+      light1X = 520;
+      light2X = 800;
+      lightYStart = 270;
       lightYStep = 100;
       timeX = 380;
-      timeY = 1540;
+      timeY = 1300;
     } else {
       // ===== LINE 版座標 =====
-      date1X = 500;
-      date1Y = 175;
+      date1X = 480;
+      date1Y = 170;
       date2X = 780;
-      date2Y = 175;
+      date2Y = 170;
       light1X = 560;
-      light2X = 750;
+      light2X = 850;
       lightYStart = 300;
       lightYStep = 100;
-      timeX = 280;
-      timeY = 1600;
+      timeX = 380;
+      timeY = 1300;
     }
     
     // ✅ 寫入日期
