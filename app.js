@@ -1,5 +1,4 @@
 
-
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -605,7 +604,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     console.log(`📅 日期: ${day0Label} | ${day1Label}`);
     console.log(`🕐 資料時間: ${dataTimeStr}`);
     
-    // ✅ 根據版本選擇不同的模板（這行是關鍵！）
+    // ✅ 根據版本選擇不同的模板
     const templateFile = version === 'fb' 
       ? 'template_page1_fb.png' 
       : 'template_page1.png';
@@ -670,17 +669,34 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     return null;
   }
 }
+
 // ==========================================
-// ✅ 產生圖片訊息（使用快取，不重新計算）
+// ✅ 產生圖片訊息（支援 LINE 和 FB 版本，使用快取）
 // ==========================================
 async function generatePage1ImageFlex(version = 'line') {
   try {
-    // ✅ 直接使用快取，不重新計算
+    // ✅ 確保快取存在
     const cache = await getCachedForecast();
     
     if (cache && cache.page1) {
       console.log(`📦 使用快取圖片 (版本: ${version})`);
-      return cache.page1;
+      
+      // ✅ 根據版本回傳不同的圖片
+      if (version === 'fb') {
+        // Facebook 版：使用 current_page1_fb.png
+        return {
+          type: 'image',
+          originalContentUrl: `${BASE_URL}/tmp/current_page1_fb.png`,
+          previewImageUrl: `${BASE_URL}/tmp/current_page1_fb.png`
+        };
+      } else {
+        // LINE 版：使用 current_page1.png
+        return {
+          type: 'image',
+          originalContentUrl: `${BASE_URL}/tmp/current_page1.png`,
+          previewImageUrl: `${BASE_URL}/tmp/current_page1.png`
+        };
+      }
     }
     
     // ⚠️ 如果快取不存在，才即時計算（備援）
@@ -731,6 +747,7 @@ async function generatePage1ImageFlex(version = 'line') {
     const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
     const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
     
+    // ✅ 傳入 version 參數，生成對應的圖片
     const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, version);
     if (!imageBuffer) {
       return {
@@ -869,19 +886,19 @@ async function precomputeAndCache() {
     const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
     const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
     
-    // 生成 LINE 版本
+    // ✅ 生成 LINE 版本
     const imageBufferLine = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '', 'line');
     const filenameLine = 'current_page1.png';
     fs.writeFileSync(path.join('/tmp', filenameLine), imageBufferLine);
     console.log(`✅ LINE 版圖片已儲存: ${filenameLine}`);
     
-    // 生成 Facebook 版本
+    // ✅ 生成 Facebook 版本
     const imageBufferFb = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '', 'fb');
     const filenameFb = 'current_page1_fb.png';
     fs.writeFileSync(path.join('/tmp', filenameFb), imageBufferFb);
     console.log(`✅ FB 版圖片已儲存: ${filenameFb}`);
     
-    // 快取使用 LINE 版本
+    // ✅ 快取使用 LINE 版本
     const page1 = {
       type: 'image',
       originalContentUrl: `${BASE_URL}/tmp/${filenameLine}`,
