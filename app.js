@@ -621,28 +621,28 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     
     if (version === 'fb') {
       // ===== Facebook 版座標 =====
-      date1X = 540;
-      date1Y = 192;
-      date2X = 855;
-      date2Y = 192;
-      light1X = 560;
-      light2X = 880;
+      date1X = 480;
+      date1Y = 180;
+      date2X = 780;
+      date2Y = 180;
+      light1X = 500;
+      light2X = 840;
       lightYStart = 290;
       lightYStep = 100;
       timeX = 380;
       timeY = 1540;
     } else {
       // ===== LINE 版座標 =====
-      date1X = 560;
-      date1Y = 200;
-      date2X = 880;
-      date2Y = 180;
+      date1X = 500;
+      date1Y = 175;
+      date2X = 780;
+      date2Y = 175;
       light1X = 560;
-      light2X = 890;
+      light2X = 750;
       lightYStart = 300;
       lightYStep = 100;
-      timeX = 580;
-      timeY = 1500;
+      timeX = 280;
+      timeY = 1600;
     }
     
     // ✅ 寫入日期
