@@ -1,4 +1,5 @@
 
+
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
@@ -9,19 +10,25 @@ const app = express();
 app.use(express.json());
 
 // ==========================================
+// ⚙️ ===== 設定區塊（請填入你的金鑰） =====
+// ==========================================
+
+// LINE Bot 設定
+const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
+const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
+
+// Facebook 設定
+const FB_ACCESS_TOKEN = 'EAGaD7FThBa0BSGD4emxlBlGfxieALRwUB0CA51ruKksjWKuYks4nLYPlvhKRolA2CxwV0W1nmZC0nHZByxGZCiAVbyV8jkIhqIBC6tWhk9NsYUjc5xC0I4dMxuo9P4J697RZB5mnBEUuu0fPgsVESS1RZCiecPOd7twBk3I2z7AEL2otYBxOBGDAJhKaPvRwCdUpXN3AOqTaguKp53J7c';
+const FB_PAGE_ID = '1116517654884615';
+
+// 伺服器網址
+const BASE_URL = 'https://line-bot-v9q8.onrender.com';
+
+// ==========================================
 // ✅ 靜態檔案服務
 // ==========================================
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/tmp', express.static('/tmp'));
-
-// ==========================================
-// ⚠️ 請填入你的金鑰 ⚠️
-// ==========================================
-const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
-const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
-// ==========================================
-
-const BASE_URL = 'https://line-bot-v9q8.onrender.com';
 
 // GitHub 設定 (可選)
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -797,6 +804,58 @@ async function generatePage1ImageFlex(version = 'line') {
 }
 
 // ==========================================
+// ✅ 發布到 Facebook 限時動態
+// ==========================================
+async function publishToFacebookStory() {
+  try {
+    // 使用 FB 版圖片（加上時間戳避免快取）
+    const imageUrl = `${BASE_URL}/tmp/current_page1_fb.png?t=${Date.now()}`;
+    
+    console.log(`📤 開始發布 Facebook 限時動態...`);
+    console.log(`🖼️  圖片網址: ${imageUrl}`);
+    
+    // 步驟 1：上傳圖片到 Facebook
+    const uploadRes = await axios.post(
+      `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photos`,
+      {
+        url: imageUrl,
+        published: false
+      },
+      {
+        params: { access_token: FB_ACCESS_TOKEN },
+        timeout: 30000
+      }
+    );
+    
+    const photoId = uploadRes.data.id;
+    console.log(`✅ 圖片上傳成功，photo_id: ${photoId}`);
+    
+    // 步驟 2：發布限時動態
+    const storyRes = await axios.post(
+      `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photo_stories`,
+      {
+        photo_id: photoId,
+        caption: '🌡️ 皮膚濕度壓力指數'
+      },
+      {
+        params: { access_token: FB_ACCESS_TOKEN },
+        timeout: 30000
+      }
+    );
+    
+    console.log(`✅ Facebook 限時動態發布成功！`);
+    console.log(`   post_id: ${storyRes.data.post_id}`);
+    
+    return storyRes.data;
+    
+  } catch (error) {
+    console.error('❌ Facebook 發布失敗:');
+    console.error(`   錯誤訊息: ${error.response?.data?.error?.message || error.message}`);
+    return null;
+  }
+}
+
+// ==========================================
 // 錯誤訊息 Flex Message
 // ==========================================
 function getErrorFlexMessage() {
@@ -939,6 +998,11 @@ async function precomputeAndCache() {
       startOffset: startOffset
     };
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
+    
+    // ==========================================
+    // ✅ 發布到 Facebook 限時動態
+    // ==========================================
+    await publishToFacebookStory();
     
     const duration = Date.now() - startTime;
     console.log(`✅ 快取預計算完成，耗時 ${duration}ms`);
