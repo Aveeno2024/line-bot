@@ -714,7 +714,7 @@ async function getDailySummary(city, dateOffset = 0) {
     return null;
   }
   
-  const dataTime = `${targetDateStr} 07:00-19:00 Daily Avg. (${summary.dataCount}筆)`;
+  const dataTime = `${targetDateStr} 07:00-19:00 Daily Avg.`;
   console.log(`   ✅ ${city.displayName} ${dataTime}`);
   
   return {
@@ -1843,7 +1843,7 @@ cron.schedule('30 6 * * *', () => {
   console.log(`📌 舊版: 抓取當天 14:00 單點數據`);
   console.log(`📌 新版: 抓取當天 07:00-19:00 全天綜合指標 (需 ≥10筆且覆蓋≥10小時)`);
   precomputeAndCacheOld();
-  precomputeAndCacheNew();
+  // precomputeAndCacheNew();
 }, {
   timezone: "Asia/Taipei"
 });
