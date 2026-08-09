@@ -8,7 +8,8 @@ const path = require('path');
 const app = express();
 app.use(express.json());
 
-// ==========================================
+
+/ ==========================================
 // ⚙️ ===== 設定區塊（請填入你的金鑰） =====
 // ==========================================
 // LINE Bot 設定
@@ -36,6 +37,7 @@ const GITHUB_REPO = process.env.GITHUB_REPO;
 const SUBSCRIBERS_FILE = './subscribers.json';
 const GROUPS_FILE = './groups.json';
 const CACHE_FILE = './cached_forecast.json';
+const CACHE_FILE_DAILY = './cached_forecast_daily.json';
 
 // 全域變數
 let subscribers = [];
@@ -463,55 +465,137 @@ async function fetchFullForecast(city) {
   }
 }
 
+// ==========================================
+// ✅ 優化版：從完整資料中提取指定日期的全天數據 (分布夠廣，無重複)
+// ==========================================
 function extractFullDayData(forecastData, targetDateStr) {
   if (!forecastData) return null;
   
   const { tempTimes, humTimes } = forecastData;
   const hourlyData = [];
   
-  for (let hour = 7; hour <= 19; hour++) {
-    const timeStr = `${targetDateStr}T${String(hour).padStart(2, '0')}:00:00`;
-    
+  // ==========================================
+  // 取樣策略 (分布夠廣，無重複)：
+  // 07:00 → 固定 07:00 (不擴張)
+  // 08:00-18:00 → 前後抓 (自動避開已被使用的整點)
+  // 19:00 → 固定 19:00 (不擴張)
+  // ==========================================
+  
+  // 用來記錄已被使用的整點，避免重複
+  const usedHours = new Set();
+  
+  const timeSlots = [];
+  
+  // 07:00 - 固定 07:00 (不擴張)
+  timeSlots.push({ 
+    targetHour: 7, 
+    mode: '固定(07:00)', 
+    searchHours: [7]
+  });
+  
+  // 08:00-18:00 - 前後抓 (避開已被使用的整點，確保分布廣)
+  for (let hour = 8; hour <= 18; hour++) {
+    const candidates = [hour, hour - 1, hour + 1];
+    const available = candidates.filter(h => !usedHours.has(h));
+    timeSlots.push({ 
+      targetHour: hour, 
+      mode: '前後抓(避重複)', 
+      searchHours: available.length > 0 ? available : [hour]
+    });
+  }
+  
+  // 19:00 - 固定 19:00 (不擴張)
+  timeSlots.push({ 
+    targetHour: 19, 
+    mode: '固定(19:00)', 
+    searchHours: [19]
+  });
+  
+  console.log(`   📌 取樣策略 (分布夠廣，無重複)：`);
+  console.log(`      • 07:00 → 固定 07:00`);
+  console.log(`      • 08:00-18:00 → 前後抓 (自動避開重複)`);
+  console.log(`      • 19:00 → 固定 19:00`);
+  
+  for (const slot of timeSlots) {
     let tempValue = null;
-    let actualDataTime = null;
-    for (const t of tempTimes) {
-      const dataTime = t.DataTime;
-      if (dataTime && dataTime.startsWith(timeStr)) {
-        tempValue = t.ElementValue?.[0]?.Temperature;
-        actualDataTime = dataTime;
-        break;
-      }
-    }
-    
     let humValue = null;
-    if (actualDataTime) {
-      for (const h of humTimes) {
-        if (h.DataTime === actualDataTime) {
-          humValue = h.ElementValue?.[0]?.RelativeHumidity;
+    let actualDataTime = null;
+    let foundHour = null;
+    
+    for (const searchHour of slot.searchHours) {
+      if (usedHours.has(searchHour)) {
+        console.log(`      ⏭️ ${String(searchHour).padStart(2, '0')}:00 已被使用，跳過`);
+        continue;
+      }
+      
+      const timeStr = `${targetDateStr}T${String(searchHour).padStart(2, '0')}:00:00`;
+      
+      let tempFound = null;
+      let timeFound = null;
+      for (const t of tempTimes) {
+        const dataTime = t.DataTime;
+        if (dataTime && dataTime.startsWith(timeStr)) {
+          tempFound = t.ElementValue?.[0]?.Temperature;
+          timeFound = dataTime;
+          break;
+        }
+      }
+      
+      if (tempFound !== null && timeFound) {
+        let humFound = null;
+        for (const h of humTimes) {
+          if (h.DataTime === timeFound) {
+            humFound = h.ElementValue?.[0]?.RelativeHumidity;
+            break;
+          }
+        }
+        
+        if (humFound !== null) {
+          tempValue = tempFound;
+          humValue = humFound;
+          actualDataTime = timeFound;
+          foundHour = searchHour;
+          usedHours.add(searchHour);
           break;
         }
       }
     }
     
     if (tempValue !== null && humValue !== null) {
+      const displayHour = slot.targetHour;
+      const isOriginal = (foundHour === displayHour);
+      const icon = isOriginal ? '✅' : '🔄';
+      console.log(`      ${icon} ${String(displayHour).padStart(2, '0')}:00 → 使用 ${foundHour}:00 的數據${isOriginal ? ' (原時段)' : ' (替代)'}`);
+      
       hourlyData.push({
         temp: Math.round(parseFloat(tempValue)),
         humidity: Math.round(parseFloat(humValue)),
         dataTime: actualDataTime,
-        hour: hour
+        hour: displayHour,
+        sourceHour: foundHour,
+        mode: slot.mode,
+        isOriginal: isOriginal
       });
     } else {
+      const displayHour = slot.targetHour;
+      console.log(`      ⚠️ ${String(displayHour).padStart(2, '0')}:00 → 無資料 (嘗試過 ${slot.searchHours.join(', ')}:00)`);
+      
       hourlyData.push({
         temp: null,
         humidity: null,
         dataTime: null,
-        hour: hour
+        hour: displayHour,
+        sourceHour: null,
+        mode: slot.mode,
+        isOriginal: false
       });
     }
   }
   
   const validCount = hourlyData.filter(d => d.temp !== null).length;
+  const usedList = Array.from(usedHours).sort();
   console.log(`   📊 提取 ${targetDateStr} 全天數據: ${validCount}/13 筆有效`);
+  console.log(`   📌 使用的整點: ${usedList.join(', ')} (共 ${usedList.length} 個)`);
   
   return hourlyData;
 }
@@ -520,8 +604,40 @@ function calculateDailySummary(hourlyData) {
   if (!hourlyData || hourlyData.length === 0) return null;
   
   const validData = hourlyData.filter(d => d.temp !== null && d.humidity !== null);
-  if (validData.length === 0) return null;
   
+  // ==========================================
+  // ✅ 門檻 1：數據筆數 ≥ 10
+  // ==========================================
+  const MIN_VALID_COUNT = 10;
+  if (validData.length < MIN_VALID_COUNT) {
+    console.log(`   ⚠️ 有效數據僅 ${validData.length} 筆，低於門檻 ${MIN_VALID_COUNT} 筆`);
+    return null;
+  }
+  
+  // ==========================================
+  // ✅ 門檻 2：時間必須覆蓋 08:00-18:00 至少 10 個小時
+  // ==========================================
+  const requiredHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+  const validHours = validData.map(d => d.hour);
+  
+  let coveredCount = 0;
+  for (const h of requiredHours) {
+    if (validHours.includes(h)) {
+      coveredCount++;
+    }
+  }
+  
+  const MIN_COVERED_HOURS = 10;
+  if (coveredCount < MIN_COVERED_HOURS) {
+    console.log(`   ⚠️ 有效數據僅覆蓋 ${coveredCount} 個小時（08:00-18:00），低於門檻 ${MIN_COVERED_HOURS} 小時`);
+    return null;
+  }
+  
+  console.log(`   ✅ 通過門檻檢查：${validData.length} 筆數據，覆蓋 ${coveredCount} 個小時`);
+  
+  // ==========================================
+  // 計算綜合指標
+  // ==========================================
   const avgTemp = validData.reduce((sum, d) => sum + d.temp, 0) / validData.length;
   const avgHumidity = validData.reduce((sum, d) => sum + d.humidity, 0) / validData.length;
   
@@ -533,7 +649,7 @@ function calculateDailySummary(hourlyData) {
   const comfortableHours = validData.filter(d => d.humidity < 70).length;
   const comfortableRatio = Math.round((comfortableHours / validData.length) * 100);
   
-  console.log(`   📊 全天綜合指標 (${validData.length} 筆數據):`);
+  console.log(`   📊 全天綜合指標 (${validData.length} 筆數據，覆蓋 ${coveredCount} 小時):`);
   console.log(`      🌡️  平均溫度: ${Math.round(avgTemp)}℃ (範圍: ${minTemp}~${maxTemp}℃)`);
   console.log(`      💧  平均濕度: ${Math.round(avgHumidity)}% (範圍: ${minHumidity}~${maxHumidity}%)`);
   console.log(`      😊  舒適時數: ${comfortableHours}/${validData.length} 小時 (${comfortableRatio}%)`);
@@ -549,6 +665,7 @@ function calculateDailySummary(hourlyData) {
     totalHours: validData.length,
     comfortableRatio,
     dataCount: validData.length,
+    coveredHours: coveredCount,
     tempOut: Math.round(avgTemp),
     humOut: Math.round(avgHumidity)
   };
@@ -575,9 +692,29 @@ async function getDailySummary(city, dateOffset = 0) {
   }
   
   const summary = calculateDailySummary(hourlyData);
-  if (!summary) return null;
   
-  const dataTime = `${targetDateStr} 07:00-19:00 Daily Avg.`;
+  // ✅ 如果全天數據不足，自動降級使用 14:00 單點
+  if (!summary) {
+    console.log(`   ⚠️ ${city.displayName} ${targetDateStr} 全天數據不足，改用 14:00 單點作為備援`);
+    
+    const fallback = await getForecastAtTime(city, dateOffset, 14);
+    if (fallback) {
+      console.log(`   ✅ 使用備援 14:00 單點數據: ${fallback.temp}℃, ${fallback.humidity}%`);
+      return {
+        temp: fallback.temp,
+        humidity: fallback.humidity,
+        dataTime: `${targetDateStr} 14:00 (單點，因全天數據不足)`,
+        hourlyData: hourlyData,
+        summary: null,
+        isFallback: true,
+        tempOut: fallback.temp,
+        humOut: fallback.humidity
+      };
+    }
+    return null;
+  }
+  
+  const dataTime = `${targetDateStr} 07:00-19:00 Daily Avg. (${summary.dataCount}筆)`;
   console.log(`   ✅ ${city.displayName} ${dataTime}`);
   
   return {
@@ -587,7 +724,8 @@ async function getDailySummary(city, dateOffset = 0) {
     hourlyData: hourlyData,
     summary: summary,
     tempOut: summary.tempOut,
-    humOut: summary.humOut
+    humOut: summary.humOut,
+    isFallback: false
   };
 }
 
@@ -658,31 +796,41 @@ async function calculateCityTwoDaysNew(city, startOffset = 0) {
     const weather1 = await getDailySummary(city, startOffset + 1);
     
     console.log(`\n   🔍 ${city.displayName} 第1天: ${weather0 ? '✅ 有資料' : '❌ 無資料'}`);
-    if (weather0 && weather0.summary) {
-      console.log(`      🌡️  平均溫度: ${weather0.temp}℃, 💧 平均濕度: ${weather0.humidity}%`);
-      console.log(`      📊  數據筆數: ${weather0.summary.dataCount} 筆`);
+    if (weather0) {
+      if (weather0.isFallback) {
+        console.log(`      ⚠️  [備援] 溫度: ${weather0.temp}℃, 💧 濕度: ${weather0.humidity}% (14:00單點)`);
+      } else {
+        console.log(`      🌡️  平均溫度: ${weather0.temp}℃, 💧 平均濕度: ${weather0.humidity}%`);
+        console.log(`      📊  數據筆數: ${weather0.summary?.dataCount || 0} 筆，覆蓋 ${weather0.summary?.coveredHours || 0} 小時`);
+      }
       console.log(`      📅  資料時間: ${weather0.dataTime}`);
     }
     console.log(`   🔍 ${city.displayName} 第2天: ${weather1 ? '✅ 有資料' : '❌ 無資料'}`);
-    if (weather1 && weather1.summary) {
-      console.log(`      🌡️  平均溫度: ${weather1.temp}℃, 💧 平均濕度: ${weather1.humidity}%`);
-      console.log(`      📊  數據筆數: ${weather1.summary.dataCount} 筆`);
+    if (weather1) {
+      if (weather1.isFallback) {
+        console.log(`      ⚠️  [備援] 溫度: ${weather1.temp}℃, 💧 濕度: ${weather1.humidity}% (14:00單點)`);
+      } else {
+        console.log(`      🌡️  平均溫度: ${weather1.temp}℃, 💧 平均濕度: ${weather1.humidity}%`);
+        console.log(`      📊  數據筆數: ${weather1.summary?.dataCount || 0} 筆，覆蓋 ${weather1.summary?.coveredHours || 0} 小時`);
+      }
       console.log(`      📅  資料時間: ${weather1.dataTime}`);
     }
     
-    const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity, '[新版全天]') : null;
-    const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity, '[新版全天]') : null;
+    const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity, weather0.isFallback ? '[備援-14:00]' : '[新版全天]') : null;
+    const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity, weather1.isFallback ? '[備援-14:00]' : '[新版全天]') : null;
     
     if (day0 && weather0 && weather0.summary) {
       day0._summary = weather0.summary;
+      day0._isFallback = weather0.isFallback || false;
     }
     if (day1 && weather1 && weather1.summary) {
       day1._summary = weather1.summary;
+      day1._isFallback = weather1.isFallback || false;
     }
     
     console.log(`\n   ✅ ${city.displayName} 兩天計算完成:`);
-    console.log(`      📅 第1天: ${day0 ? day0.light.emoji + ' ' + day0.light.name : '❓ 無資料'}`);
-    console.log(`      📅 第2天: ${day1 ? day1.light.emoji + ' ' + day1.light.name : '❓ 無資料'}`);
+    console.log(`      📅 第1天: ${day0 ? day0.light.emoji + ' ' + day0.light.name : '❓ 無資料'}${day0?._isFallback ? ' (備援)' : ''}`);
+    console.log(`      📅 第2天: ${day1 ? day1.light.emoji + ' ' + day1.light.name : '❓ 無資料'}${day1?._isFallback ? ' (備援)' : ''}`);
     
     let dataTime = weather0?.dataTime || weather1?.dataTime || null;
     console.log(`${'='.repeat(60)}\n`);
@@ -1335,7 +1483,7 @@ async function precomputeAndCacheNew() {
       lastCacheTime: lastCacheTimeDaily.toISOString(),
       startOffset: startOffset
     };
-    fs.writeFileSync('./cached_forecast_daily.json', JSON.stringify(cacheData, null, 2));
+    fs.writeFileSync(CACHE_FILE_DAILY, JSON.stringify(cacheData, null, 2));
     
     await publishToFacebookStoryNew();
     
@@ -1365,9 +1513,8 @@ function loadCacheFromFileOld() {
 
 function loadCacheFromFileNew() {
   try {
-    const dailyCacheFile = './cached_forecast_daily.json';
-    if (fs.existsSync(dailyCacheFile)) {
-      const data = fs.readFileSync(dailyCacheFile, 'utf8');
+    if (fs.existsSync(CACHE_FILE_DAILY)) {
+      const data = fs.readFileSync(CACHE_FILE_DAILY, 'utf8');
       const cache = JSON.parse(data);
       cachedForecastDaily = { page1: cache.page1, page2: cache.page2 };
       lastCacheTimeDaily = new Date(cache.lastCacheTime);
@@ -1694,7 +1841,7 @@ console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7
 cron.schedule('30 6 * * *', () => {
   console.log(`\n⏰ [06:30] 預計算 - 同時更新舊版(14:00)與新版(全天)快取`);
   console.log(`📌 舊版: 抓取當天 14:00 單點數據`);
-  console.log(`📌 新版: 抓取當天 07:00-19:00 全天綜合指標`);
+  console.log(`📌 新版: 抓取當天 07:00-19:00 全天綜合指標 (需 ≥10筆且覆蓋≥10小時)`);
   precomputeAndCacheOld();
   precomputeAndCacheNew();
 }, {
@@ -1766,6 +1913,9 @@ function calculateStartOffset() {
     console.log(`📡 [新版全天] API：F-D0047-089 (07:00-19:00 全天綜合)`);
     console.log(`   📱 全台3 → LINE 版圖片`);
     console.log(`   📱 全台4 → FB 版圖片`);
+    console.log(`   🔒 門檻：≥10筆數據 且 覆蓋≥10小時 (08:00-18:00)`);
+    console.log(`   🔄 不足時自動降級使用 14:00 單點`);
+    console.log(`   📌 取樣策略：07:00固定, 08-18前後抓避重複, 19:00固定`);
     console.log(`\n⏰ 預計算時間：每天 06:30 (台灣時間) - 兩種版本同時更新`);
     console.log(`🕐 每日推播：每天 07:00 (台灣時間) - 使用舊版14:00`);
     console.log(`📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始抓取`);
