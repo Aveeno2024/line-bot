@@ -1,14 +1,4 @@
 
-const express = require('express');
-const axios = require('axios');
-const fs = require('fs');
-const cron = require('node-cron');
-const Jimp = require('jimp');
-const path = require('path');
-const nodemailer = require('nodemailer');
-const app = express();
-app.use(express.json());
-
 // ==========================================
 // ⚙️ ===== 設定區塊 =====
 // ==========================================
@@ -22,17 +12,24 @@ const FB_ACCESS_TOKEN = 'EAGaD7FThBa0BSKOOXZAloexV9I3lZBOwtCjiSX7Hfa8sHPnBRyR6GH
 const FB_PAGE_ID = '1260518434131656';
 const BASE_URL = 'https://line-bot-v9q8.onrender.com';
 
+const express = require('express');
+const axios = require('axios');
+const fs = require('fs');
+const cron = require('node-cron');
+const Jimp = require('jimp');
+const path = require('path');
+const app = express();
+app.use(express.json());
+
 // ==========================================
-// ✅ Email 設定
+// ⚙️ ===== 設定區塊 =====
 // ==========================================
-const EMAIL_CONFIG = {
-  service: 'gmail',
-  auth: {
-    user: 'yhchyr@gmail.com',      // 你的 Gmail
-    pass: 'oxujjuddsqhaaemwd' // 應用程式密碼（16碼，無空格）
-  },
-  to: 'yhchyr@gmail.com'            // 收件人（可與寄件人相同）
-};
+
+const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
+const CWA_API_KEY = 'CWA-API-Key';
+const FB_ACCESS_TOKEN = 'FB-token';
+const FB_PAGE_ID = 'FB-ID';
+const BASE_URL = 'https://line-bot-v9q8.onrender.com';
 
 // ==========================================
 // ✅ 靜態檔案服務
@@ -640,46 +637,6 @@ async function calculateAllCities(startOffset = 0) {
 }
 
 // ==========================================
-// ✅ 寄送 Email 函數
-// ==========================================
-async function sendDeepSeekPromptByEmail(promptText, dateStr) {
-  try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: EMAIL_CONFIG.auth.user,
-        pass: EMAIL_CONFIG.auth.pass
-      }
-    });
-
-    const mailOptions = {
-      from: `"皮膚壓力指數 Bot" <${EMAIL_CONFIG.auth.user}>`,
-      to: EMAIL_CONFIG.to,
-      subject: `📊 DeepSeek 數據 Prompt - ${dateStr}`,
-      text: promptText,
-      html: `
-        <h2>📊 六都皮膚壓力指數數據</h2>
-        <p><strong>日期：</strong>${dateStr}</p>
-        <hr>
-        <pre style="font-size:14px; background:#f5f5f5; padding:15px; border-radius:5px;">${promptText}</pre>
-        <hr>
-        <p style="color:#999; font-size:12px;">此信件由皮膚壓力指數 Bot 自動發送，請勿回覆。</p>
-      `
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Email 已寄送: ${info.messageId}`);
-    return true;
-
-  } catch (error) {
-    console.error('❌ Email 寄送失敗:', error.message);
-    return false;
-  }
-}
-
-// ==========================================
 // ✅ 繪製彩色圓圈
 // ==========================================
 function drawColoredCircle(image, x, y, color, radius = 24) {
@@ -744,16 +701,16 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     let disX, disY;
     
     if (version === 'fb') {
-      date1X = 480; date1Y = 160;
-      date2X = 770; date2Y = 160;
-      light1X = 520; light2X = 800;
-      lightYStart = 270; lightYStep = 90;
-      timeX = 370; timeY = 1450;
+      date1X = 490; date1Y = 165;
+      date2X = 790; date2Y = 165;
+      light1X = 560; light2X = 865;
+      lightYStart = 280; lightYStep = 97;
+      timeX = 370; timeY = 1560;
       disX = 370; disY = 1530;
     } else {
       date1X = 505; date1Y = 170;
       date2X = 805; date2Y = 170;
-      light1X = 560; light2X = 850;
+      light1X = 560; light2X = 865;
       lightYStart = 300; lightYStep = 100;
       timeX = 380; timeY = 1560;
       disX = 380; disY = 1640;
@@ -785,8 +742,8 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     const displayTime = dataTimeStr || '2026-07-25 07:00-19:00 Daily Avg.';
     image.print(fontSmall, timeX, timeY, displayTime);
     
-    const disclaimer = "📊 中央氣象署｜僅供生活保健參考，非醫療診斷依據";
-    image.print(fontDisclaimer, disX, disY, disclaimer);
+    // const disclaimer = "📊 中央氣象署｜僅供生活保健參考，非醫療診斷依據";
+    // image.print(fontDisclaimer, disX, disY, disclaimer);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
@@ -915,12 +872,10 @@ async function runDailyPublish() {
     };
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
     
+    // ✅ 儲存 DeepSeek Prompt（僅存檔，不寄信）
     if (allData.deepseekPrompt) {
       fs.writeFileSync('./deepseek_prompt.txt', allData.deepseekPrompt);
       console.log(`✅ DeepSeek Prompt 已儲存到 deepseek_prompt.txt`);
-      
-      const today = getTaiwanDateString(startOffset);
-      await sendDeepSeekPromptByEmail(allData.deepseekPrompt, today);
     }
     
     const fbImageUrl = `${BASE_URL}/tmp/current_page1_fb.png?t=${Date.now()}`;
@@ -1139,7 +1094,7 @@ app.get('/api/push-test', async (req, res) => {
 });
 
 // ==========================================
-// ✅ 新增：提供 deepseek_prompt.txt 的下載路由
+// ✅ 提供 deepseek_prompt.txt 的下載路由（方式一）
 // ==========================================
 app.get('/download-deepseek-prompt', (req, res) => {
   const filePath = path.join(__dirname, 'deepseek_prompt.txt');
@@ -1367,7 +1322,6 @@ console.log('💓 已設定定時 ping（每 10 分鐘）防止 Render 休眠');
     console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
     console.log(`👥 群組數量：${groups.length} 個`);
-    console.log(`📧 Email 寄送：已啟用 (每日 06:30 寄送 DeepSeek Prompt)`);
     console.log(`📥 下載連結：/download-deepseek-prompt`);
     console.log(`========================================\n`);
   });
