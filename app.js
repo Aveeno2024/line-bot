@@ -692,7 +692,7 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
       date2X = 790; date2Y = 165;
       light1X = 560; light2X = 865;
       lightYStart = 285; lightYStep = 100;
-      timeX = 370; timeY = 1560;
+      timeX = 370; timeY = 1570;
       disX = 370; disY = 1530;
     } else {
       date1X = 505; date1Y = 170;
