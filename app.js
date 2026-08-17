@@ -747,14 +747,14 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     if (version === 'fb') {
       date1X = 480; date1Y = 170;
       date2X = 770; date2Y = 170;
-      light1X = 550; light2X = 900;
-      lightYStart = 290; lightYStep = 90;
-      timeX = 370; timeY = 1850;
+      light1X = 550; light2X = 860;
+      lightYStart = 290; lightYStep = 94;
+      timeX = 370; timeY = 1650;
       disX = 370; disY = 1530;
     } else {
       date1X = 505; date1Y = 170;
       date2X = 805; date2Y = 170;
-      light1X = 560; light2X = 890;
+      light1X = 560; light2X = 900;
       lightYStart = 300; lightYStep = 100;
       timeX = 380; timeY = 1560;
       disX = 380; disY = 1640;
