@@ -1,14 +1,4 @@
 
-const express = require('express');
-const axios = require('axios');
-const fs = require('fs');
-const cron = require('node-cron');
-const Jimp = require('jimp');
-const path = require('path');
-const app = express();
-app.use(express.json());
-
-
 // =========================================
 // ⚙️ ===== 設定區塊（請填入你的金鑰） =====
 // ==========================================
@@ -20,8 +10,40 @@ const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
 const FB_ACCESS_TOKEN = 'EAGaD7FThBa0BSKOOXZAloexV9I3lZBOwtCjiSX7Hfa8sHPnBRyR6GHuJ3wSXWzpal3wZB1F9hqwLGqc4jRMZA50iVlfkcBudKYVKeZBJVZC05j4F2HVgcCvZC3ZBw75poFOxQwuj5tuuOKQiN4tUxLCVPFgr3fpi7UGIgrMeO71yAVZCwynBcvJkDKTV3SaazqmjvQ5ZAHCwZBgrCBO6Au9R0JSZBWOS';
 const FB_PAGE_ID = '1260518434131656';
 
-// 伺服器網址
+const express = require('express');
+const axios = require('axios');
+const fs = require('fs');
+const cron = require('node-cron');
+const Jimp = require('jimp');
+const path = require('path');
+const nodemailer = require('nodemailer');
+const app = express();
+app.use(express.json());
+
+// ==========================================
+// ⚙️ ===== 設定區塊 =====
+// ==========================================
+
+// LINE Bot 設定
+const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
+const CWA_API_KEY = 'CWA-B59372C7-9BD4-44F8-B759-D6ED723C6BC4';
+
+// Facebook 設定
+const FB_ACCESS_TOKEN = 'EAGaD7FThBa0BSKOOXZAloexV9I3lZBOwtCjiSX7Hfa8sHPnBRyR6GHuJ3wSXWzpal3wZB1F9hqwLGqc4jRMZA50iVlfkcBudKYVKeZBJVZC05j4F2HVgcCvZC3ZBw75poFOxQwuj5tuuOKQiN4tUxLCVPFgr3fpi7UGIgrMeO71yAVZCwynBcvJkDKTV3SaazqmjvQ5ZAHCwZBgrCBO6Au9R0JSZBWOS';
+const FB_PAGE_ID = '1260518434131656';
 const BASE_URL = 'https://line-bot-v9q8.onrender.com';
+
+// ==========================================
+// ✅ Email 設定
+// ==========================================
+const EMAIL_CONFIG = {
+  service: 'gmail',
+  auth: {
+    user: 'yhchyr@gmail.com',      // 你的 Gmail
+    pass: 'oxujjuddsqhaaemwd' // 應用程式密碼（16碼，無空格）
+  },
+  to: 'yhchyr@gmail.com'            // 收件人（可與寄件人相同）
+};
 
 // ==========================================
 // ✅ 靜態檔案服務
@@ -29,23 +51,18 @@ const BASE_URL = 'https://line-bot-v9q8.onrender.com';
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/tmp', express.static('/tmp'));
 
-// GitHub 設定 (可選)
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_REPO = process.env.GITHUB_REPO;
 
-// 檔案路徑定義
 const SUBSCRIBERS_FILE = './subscribers.json';
 const GROUPS_FILE = './groups.json';
 const CACHE_FILE = './cached_forecast.json';
-const CACHE_FILE_DAILY = './cached_forecast_daily.json';
 
-// 全域變數
 let subscribers = [];
 let groups = [];
-let cachedForecast = null;        // 舊版 14:00 快取
-let cachedForecastDaily = null;   // 新版 全天綜合 快取
+let cachedForecast = null;
 let lastCacheTime = null;
-let lastCacheTimeDaily = null;
+let isPublishing = false;
 
 // ==========================================
 // ⭐ 限流機制
@@ -302,113 +319,31 @@ function getTaiwanMinute() {
   return getTaiwanTime().getUTCMinutes();
 }
 
-// ==========================================
-// ✅ 舊版：中央氣象署 API - 單點查詢 (14:00)
-// ==========================================
-async function getForecastAtTime(city, dateOffset = 0, targetHour = 14) {
-  console.log(`\n🔍 ===== [舊版14:00] ${city.displayName} 第${dateOffset+1}天原始數據 ====`);
-  console.log(`📡 請求: ${city.displayName} ${dateOffset}天後 ${targetHour}:00`);
+function getDateString(offset = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return `${date.getMonth()+1}/${date.getDate()}`;
+}
+
+function calculateStartOffset() {
+  const hours = getTaiwanHour();
+  const minutes = getTaiwanMinute();
+  const currentTime = hours + minutes / 60;
   
-  try {
-    const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-089?Authorization=${CWA_API_KEY}&format=JSON&LocationName=${encodeURIComponent(city.apiName)}`;
-    const response = await axios.get(url, { timeout: 15000 });
-    const data = response.data;
-    
-    if (data.success !== "true") {
-      console.log(`❌ API 回應失敗: ${data.success}`);
-      return null;
-    }
-    
-    const locations = data.records?.Locations;
-    if (!locations) {
-      console.log(`❌ 無 Locations 資料`);
-      return null;
-    }
-    
-    let targetLocation = null;
-    for (const locSet of locations) {
-      if (locSet.Location) {
-        for (const loc of locSet.Location) {
-          if (loc.LocationName === city.apiName) {
-            targetLocation = loc;
-            break;
-          }
-        }
-      }
-      if (targetLocation) break;
-    }
-    
-    if (!targetLocation) {
-      console.log(`❌ 找不到 ${city.apiName} 的資料`);
-      return null;
-    }
-    
-    const tempElem = targetLocation.WeatherElement?.find(w => w.ElementName === "溫度");
-    const humElem = targetLocation.WeatherElement?.find(w => w.ElementName === "相對濕度");
-    
-    if (!tempElem || !humElem) {
-      console.log(`❌ 找不到溫度或濕度元素`);
-      return null;
-    }
-    
-    const targetDateStr = getTaiwanDateString(dateOffset);
-    console.log(`📅 目標日期 (台灣時間): ${targetDateStr}`);
-    
-    let tempValue = null, humValue = null;
-    let actualDataTime = null;
-    
-    for (const t of tempElem.Time) {
-      const dataTime = t.DataTime;
-      if (dataTime) {
-        const parts = dataTime.split('T');
-        if (parts.length === 2) {
-          const datePart = parts[0];
-          const timePart = parts[1]?.split(':')[0];
-          if (datePart === targetDateStr && parseInt(timePart) === targetHour) {
-            tempValue = t.ElementValue?.[0]?.Temperature;
-            actualDataTime = dataTime;
-            console.log(`✅ 找到匹配: ${dataTime} → 溫度=${tempValue}℃`);
-            break;
-          }
-        }
-      }
-    }
-    
-    if (actualDataTime) {
-      for (const h of humElem.Time) {
-        if (h.DataTime === actualDataTime) {
-          humValue = h.ElementValue?.[0]?.RelativeHumidity;
-          console.log(`✅ 找到匹配濕度: ${actualDataTime} → 濕度=${humValue}%`);
-          break;
-        }
-      }
-    }
-    
-    if (tempValue && humValue && actualDataTime) {
-      const formattedTime = actualDataTime.replace('T', ' ').replace(/\+08:00/g, '').trim();
-      console.log(`📊 原始數據: 溫度=${tempValue}℃, 濕度=${humValue}%`);
-      console.log(`📅 API DataTime: ${formattedTime}`);
-      console.log(`✅ API 連線成功`);
-      return {
-        temp: Math.round(parseFloat(tempValue)),
-        humidity: Math.round(parseFloat(humValue)),
-        dataTime: formattedTime
-      };
-    }
-    
-    console.log(`❌ 找不到 ${targetDateStr} ${targetHour}:00 的數據`);
-    return null;
-  } catch (error) {
-    console.error(`❌ ${city.displayName} getForecastAtTime 錯誤: ${error.message}`);
-    return null;
+  if (currentTime >= 18.0) {
+    console.log(`⏰ 台灣時間 ${hours}:${minutes}，已過 18:00，從 +1 天（明天）開始抓取預報`);
+    return 1;
+  } else {
+    console.log(`⏰ 台灣時間 ${hours}:${minutes}，尚未過 18:00，從 +0 天（今天）開始抓取`);
+    return 0;
   }
 }
 
 // ==========================================
-// ✅ 新版：全天綜合指標計算函數 (07:00-19:00)
+// ✅ 中央氣象署 API - 取得完整預報資料
 // ==========================================
 async function fetchFullForecast(city) {
-  console.log(`\n🔍 ===== [新版全天] ${city.displayName} 取得完整預報資料 ====`);
+  console.log(`\n🔍 ===== ${city.displayName} 取得完整預報資料 ====`);
   
   try {
     const url = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-089?Authorization=${CWA_API_KEY}&format=JSON&LocationName=${encodeURIComponent(city.apiName)}`;
@@ -466,7 +401,7 @@ async function fetchFullForecast(city) {
 }
 
 // ==========================================
-// ✅ 優化版：從完整資料中提取指定日期的全天數據 (分布夠廣，無重複)
+// ✅ 提取指定日期的全天數據 (07:00-19:00)
 // ==========================================
 function extractFullDayData(forecastData, targetDateStr) {
   if (!forecastData) return null;
@@ -474,47 +409,21 @@ function extractFullDayData(forecastData, targetDateStr) {
   const { tempTimes, humTimes } = forecastData;
   const hourlyData = [];
   
-  // ==========================================
-  // 取樣策略 (分布夠廣，無重複)：
-  // 07:00 → 固定 07:00 (不擴張)
-  // 08:00-18:00 → 前後抓 (自動避開已被使用的整點)
-  // 19:00 → 固定 19:00 (不擴張)
-  // ==========================================
-  
-  // 用來記錄已被使用的整點，避免重複
   const usedHours = new Set();
-  
   const timeSlots = [];
   
-  // 07:00 - 固定 07:00 (不擴張)
-  timeSlots.push({ 
-    targetHour: 7, 
-    mode: '固定(07:00)', 
-    searchHours: [7]
-  });
+  timeSlots.push({ targetHour: 7, searchHours: [7] });
   
-  // 08:00-18:00 - 前後抓 (避開已被使用的整點，確保分布廣)
   for (let hour = 8; hour <= 18; hour++) {
     const candidates = [hour, hour - 1, hour + 1];
     const available = candidates.filter(h => !usedHours.has(h));
     timeSlots.push({ 
       targetHour: hour, 
-      mode: '前後抓(避重複)', 
       searchHours: available.length > 0 ? available : [hour]
     });
   }
   
-  // 19:00 - 固定 19:00 (不擴張)
-  timeSlots.push({ 
-    targetHour: 19, 
-    mode: '固定(19:00)', 
-    searchHours: [19]
-  });
-  
-  console.log(`   📌 取樣策略 (分布夠廣，無重複)：`);
-  console.log(`      • 07:00 → 固定 07:00`);
-  console.log(`      • 08:00-18:00 → 前後抓 (自動避開重複)`);
-  console.log(`      • 19:00 → 固定 19:00`);
+  timeSlots.push({ targetHour: 19, searchHours: [19] });
   
   for (const slot of timeSlots) {
     let tempValue = null;
@@ -523,10 +432,7 @@ function extractFullDayData(forecastData, targetDateStr) {
     let foundHour = null;
     
     for (const searchHour of slot.searchHours) {
-      if (usedHours.has(searchHour)) {
-        console.log(`      ⏭️ ${String(searchHour).padStart(2, '0')}:00 已被使用，跳過`);
-        continue;
-      }
+      if (usedHours.has(searchHour)) continue;
       
       const timeStr = `${targetDateStr}T${String(searchHour).padStart(2, '0')}:00:00`;
       
@@ -562,304 +468,227 @@ function extractFullDayData(forecastData, targetDateStr) {
     }
     
     if (tempValue !== null && humValue !== null) {
-      const displayHour = slot.targetHour;
-      const isOriginal = (foundHour === displayHour);
-      const icon = isOriginal ? '✅' : '🔄';
-      console.log(`      ${icon} ${String(displayHour).padStart(2, '0')}:00 → 使用 ${foundHour}:00 的數據${isOriginal ? ' (原時段)' : ' (替代)'}`);
-      
       hourlyData.push({
         temp: Math.round(parseFloat(tempValue)),
         humidity: Math.round(parseFloat(humValue)),
         dataTime: actualDataTime,
-        hour: displayHour,
-        sourceHour: foundHour,
-        mode: slot.mode,
-        isOriginal: isOriginal
+        hour: slot.targetHour,
+        sourceHour: foundHour
       });
     } else {
-      const displayHour = slot.targetHour;
-      console.log(`      ⚠️ ${String(displayHour).padStart(2, '0')}:00 → 無資料 (嘗試過 ${slot.searchHours.join(', ')}:00)`);
-      
       hourlyData.push({
         temp: null,
         humidity: null,
         dataTime: null,
-        hour: displayHour,
-        sourceHour: null,
-        mode: slot.mode,
-        isOriginal: false
+        hour: slot.targetHour,
+        sourceHour: null
       });
     }
   }
   
   const validCount = hourlyData.filter(d => d.temp !== null).length;
-  const usedList = Array.from(usedHours).sort();
   console.log(`   📊 提取 ${targetDateStr} 全天數據: ${validCount}/13 筆有效`);
-  console.log(`   📌 使用的整點: ${usedList.join(', ')} (共 ${usedList.length} 個)`);
   
   return hourlyData;
 }
 
+// ==========================================
+// ✅ 計算全天綜合指標
+// ==========================================
 function calculateDailySummary(hourlyData) {
   if (!hourlyData || hourlyData.length === 0) return null;
   
   const validData = hourlyData.filter(d => d.temp !== null && d.humidity !== null);
   
-  // ==========================================
-  // ✅ 門檻 1：數據筆數 ≥ 10
-  // ==========================================
-  const MIN_VALID_COUNT = 10;
-  if (validData.length < MIN_VALID_COUNT) {
-    console.log(`   ⚠️ 有效數據僅 ${validData.length} 筆，低於門檻 ${MIN_VALID_COUNT} 筆`);
+  if (validData.length < 10) {
+    console.log(`   ⚠️ 有效數據僅 ${validData.length} 筆，低於門檻 10 筆`);
     return null;
   }
   
-  // ==========================================
-  // ✅ 門檻 2：時間必須覆蓋 08:00-18:00 至少 10 個小時
-  // ==========================================
   const requiredHours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
   const validHours = validData.map(d => d.hour);
-  
   let coveredCount = 0;
   for (const h of requiredHours) {
-    if (validHours.includes(h)) {
-      coveredCount++;
-    }
+    if (validHours.includes(h)) coveredCount++;
   }
   
-  const MIN_COVERED_HOURS = 10;
-  if (coveredCount < MIN_COVERED_HOURS) {
-    console.log(`   ⚠️ 有效數據僅覆蓋 ${coveredCount} 個小時（08:00-18:00），低於門檻 ${MIN_COVERED_HOURS} 小時`);
+  if (coveredCount < 10) {
+    console.log(`   ⚠️ 僅覆蓋 ${coveredCount} 小時，低於門檻 10 小時`);
     return null;
   }
   
-  console.log(`   ✅ 通過門檻檢查：${validData.length} 筆數據，覆蓋 ${coveredCount} 個小時`);
+  console.log(`   ✅ 通過門檻：${validData.length} 筆數據，覆蓋 ${coveredCount} 小時`);
   
-  // ==========================================
-  // 計算綜合指標
-  // ==========================================
   const avgTemp = validData.reduce((sum, d) => sum + d.temp, 0) / validData.length;
   const avgHumidity = validData.reduce((sum, d) => sum + d.humidity, 0) / validData.length;
-  
-  const maxTemp = Math.max(...validData.map(d => d.temp));
-  const minTemp = Math.min(...validData.map(d => d.temp));
-  const maxHumidity = Math.max(...validData.map(d => d.humidity));
-  const minHumidity = Math.min(...validData.map(d => d.humidity));
-  
-  const comfortableHours = validData.filter(d => d.humidity < 70).length;
-  const comfortableRatio = Math.round((comfortableHours / validData.length) * 100);
-  
-  console.log(`   📊 全天綜合指標 (${validData.length} 筆數據，覆蓋 ${coveredCount} 小時):`);
-  console.log(`      🌡️  平均溫度: ${Math.round(avgTemp)}℃ (範圍: ${minTemp}~${maxTemp}℃)`);
-  console.log(`      💧  平均濕度: ${Math.round(avgHumidity)}% (範圍: ${minHumidity}~${maxHumidity}%)`);
-  console.log(`      😊  舒適時數: ${comfortableHours}/${validData.length} 小時 (${comfortableRatio}%)`);
   
   return {
     temp: Math.round(avgTemp),
     humidity: Math.round(avgHumidity),
-    maxTemp,
-    minTemp,
-    maxHumidity,
-    minHumidity,
-    comfortableHours,
-    totalHours: validData.length,
-    comfortableRatio,
     dataCount: validData.length,
-    coveredHours: coveredCount,
-    tempOut: Math.round(avgTemp),
-    humOut: Math.round(avgHumidity)
+    coveredHours: coveredCount
   };
 }
 
+// ==========================================
+// ✅ 取得城市全天綜合指標
+// ==========================================
 async function getDailySummary(city, dateOffset = 0) {
-  console.log(`\n🔍 ===== [新版全天] ${city.displayName} 綜合指標 (${dateOffset >= 0 ? '+' : ''}${dateOffset}天) ====`);
+  console.log(`\n🔍 ===== ${city.displayName} 綜合指標 (${dateOffset >= 0 ? '+' : ''}${dateOffset}天) ====`);
   
   const targetDateStr = getTaiwanDateString(dateOffset);
   console.log(`📅 目標日期: ${targetDateStr}`);
   
-  if (!city._forecastDataDaily) {
-    city._forecastDataDaily = await fetchFullForecast(city);
-    if (!city._forecastDataDaily) {
-      console.log(`❌ 無法取得 ${city.displayName} 預報資料`);
-      return null;
-    }
+  if (!city._forecastData) {
+    city._forecastData = await fetchFullForecast(city);
+    if (!city._forecastData) return null;
   }
   
-  const hourlyData = extractFullDayData(city._forecastDataDaily, targetDateStr);
-  if (!hourlyData || hourlyData.length === 0) {
-    console.log(`❌ 無法提取 ${targetDateStr} 的數據`);
-    return null;
-  }
+  const hourlyData = extractFullDayData(city._forecastData, targetDateStr);
+  if (!hourlyData || hourlyData.length === 0) return null;
   
   const summary = calculateDailySummary(hourlyData);
-  
-  // ✅ 如果全天數據不足，自動降級使用 14:00 單點
-  if (!summary) {
-    console.log(`   ⚠️ ${city.displayName} ${targetDateStr} 全天數據不足，改用 14:00 單點作為備援`);
-    
-    const fallback = await getForecastAtTime(city, dateOffset, 14);
-    if (fallback) {
-      console.log(`   ✅ 使用備援 14:00 單點數據: ${fallback.temp}℃, ${fallback.humidity}%`);
-      return {
-        temp: fallback.temp,
-        humidity: fallback.humidity,
-        dataTime: `${targetDateStr} 14:00 (單點，因全天數據不足)`,
-        hourlyData: hourlyData,
-        summary: null,
-        isFallback: true,
-        tempOut: fallback.temp,
-        humOut: fallback.humidity
-      };
-    }
-    return null;
-  }
-  
-  const dataTime = `${targetDateStr} 07:00-19:00 Daily Avg.`;
-  console.log(`   ✅ ${city.displayName} ${dataTime}`);
+  if (!summary) return null;
   
   return {
     temp: summary.temp,
     humidity: summary.humidity,
-    dataTime: dataTime,
-    hourlyData: hourlyData,
-    summary: summary,
-    tempOut: summary.tempOut,
-    humOut: summary.humOut,
-    isFallback: false
+    dataTime: `${targetDateStr} 07:00-19:00 Daily Avg.`,
+    dataCount: summary.dataCount,
+    coveredHours: summary.coveredHours,
+    hourlyData: hourlyData
   };
 }
 
 // ==========================================
-// ✅ 舊版：計算城市連續2天 (14:00 單點)
+// ✅ 計算六都兩天資料（新版全天綜合）
 // ==========================================
-async function calculateCityTwoDaysOld(city, startOffset = 0, targetHour = 14) {
+async function calculateAllCities(startOffset = 0) {
   console.log(`\n${'='.repeat(60)}`);
-  console.log(`🏙️ [舊版14:00] 開始計算 ${city.displayName} 連續2天 (從 +${startOffset} 天開始)`);
+  console.log(`🏙️ 開始計算六都連續2天 (從 +${startOffset} 天開始)`);
   console.log(`${'='.repeat(60)}`);
   
-  try {
-    const weather0 = await getForecastAtTime(city, startOffset, targetHour);
-    const weather1 = await getForecastAtTime(city, startOffset + 1, targetHour);
+  const results = [];
+  const deepseekData = [];
+  
+  for (const city of CITIES) {
+    city._forecastData = null;
     
-    console.log(`\n   🔍 ${city.displayName} weather0: ${weather0 ? '✅ 有資料' : '❌ 無資料'}`);
-    if (weather0) {
-      console.log(`      🌡️  溫度: ${weather0.temp}℃, 💧 濕度: ${weather0.humidity}%`);
-      console.log(`      📅  資料時間: ${weather0.dataTime}`);
-    }
-    console.log(`   🔍 ${city.displayName} weather1: ${weather1 ? '✅ 有資料' : '❌ 無資料'}`);
-    if (weather1) {
-      console.log(`      🌡️  溫度: ${weather1.temp}℃, 💧 濕度: ${weather1.humidity}%`);
-      console.log(`      📅  資料時間: ${weather1.dataTime}`);
-    }
+    const day0 = await getDailySummary(city, startOffset);
+    const day1 = await getDailySummary(city, startOffset + 1);
     
-    const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity, '[舊版14:00]') : null;
-    const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity, '[舊版14:00]') : null;
+    const shpi0 = day0 ? calculateSHPI(day0.temp, day0.humidity, `[${city.displayName} 第1天]`) : null;
+    const shpi1 = day1 ? calculateSHPI(day1.temp, day1.humidity, `[${city.displayName} 第2天]`) : null;
     
-    console.log(`\n   ✅ ${city.displayName} 兩天計算完成:`);
-    console.log(`      📅 第1天: ${day0 ? day0.light.emoji + ' ' + day0.light.name : '❓ 無資料'}`);
-    console.log(`      📅 第2天: ${day1 ? day1.light.emoji + ' ' + day1.light.name : '❓ 無資料'}`);
-    
-    let dataTime = weather0?.dataTime || weather1?.dataTime || null;
-    console.log(`${'='.repeat(60)}\n`);
-    
-    return {
+    results.push({
       city: city.displayName,
-      days: [day0, day1],
-      dataTime: dataTime
-    };
+      day0: shpi0,
+      day1: shpi1,
+      day0Raw: day0,
+      day1Raw: day1
+    });
     
-  } catch (error) {
-    console.error(`\n❌❌❌ ${city.displayName} 計算過程中發生錯誤 ❌❌❌`);
-    console.error(`   錯誤訊息: ${error.message}`);
-    console.log(`${'='.repeat(60)}\n`);
-    
-    return {
-      city: city.displayName,
-      days: [null, null],
-      dataTime: null
-    };
+    if (shpi0) {
+      deepseekData.push({
+        city: city.displayName,
+        date: getTaiwanDateString(startOffset),
+        light: shpi0.light.name,
+        temp: shpi0.tempOut,
+        humidity: shpi0.humOut,
+        delta_e: shpi0.delta_e,
+        di: shpi0.di,
+        dataCount: day0?.dataCount || 0,
+        coveredHours: day0?.coveredHours || 0
+      });
+    }
   }
+  
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`✅ 六都計算完成`);
+  console.log(`${'='.repeat(60)}`);
+  
+  // ==========================================
+  // ✅ 輸出給 DeepSeek 的資料格式
+  // ==========================================
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`🤖 ===== 提供給 DeepSeek 的六都資料 =====`);
+  console.log(`${'='.repeat(60)}`);
+  
+  const today = getTaiwanDateString(startOffset);
+  console.log(`\n📅 日期: ${today}`);
+  console.log(`\n📊 六都皮膚壓力指數數據：\n`);
+  
+  for (const d of deepseekData) {
+    console.log(`【${d.city}】`);
+    console.log(`  燈號：${d.light}`);
+    console.log(`  氣溫：${d.temp}℃`);
+    console.log(`  濕度：${d.humidity}%`);
+    console.log(`  Δe：${d.delta_e.toFixed(3)}`);
+    console.log(`  DI：${d.di.toFixed(1)}`);
+    console.log(`  數據筆數：${d.dataCount}/13 筆`);
+    console.log('');
+  }
+  
+  // ==========================================
+  // ✅ 輸出可複製貼上的純文字格式
+  // ==========================================
+  console.log(`${'='.repeat(60)}`);
+  console.log(`📋 ===== 可複製給 DeepSeek 的純文字格式 =====`);
+  console.log(`${'='.repeat(60)}`);
+  
+  let deepseekPrompt = `📅 日期：${today}\n\n`;
+  deepseekPrompt += `📊 六都皮膚壓力指數數據：\n\n`;
+  for (const d of deepseekData) {
+    deepseekPrompt += `${d.city}：${d.light}，氣溫${d.temp}℃，濕度${d.humidity}%，Δe=${d.delta_e.toFixed(3)}，DI=${d.di.toFixed(1)}\n`;
+  }
+  
+  deepseekPrompt += `\n請根據「皮膚壓力指數燈號保健建議」規範，提供今日總結與建議。`;
+  
+  console.log(deepseekPrompt);
+  console.log(`\n${'='.repeat(60)}\n`);
+  
+  return { results, deepseekData, deepseekPrompt };
 }
 
 // ==========================================
-// ✅ 新版：計算城市連續2天 (07:00-19:00 全天綜合)
+// ✅ 寄送 Email 函數
 // ==========================================
-async function calculateCityTwoDaysNew(city, startOffset = 0) {
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`🏙️ [新版全天] 開始計算 ${city.displayName} 連續2天 (從 +${startOffset} 天開始)`);
-  console.log(`${'='.repeat(60)}`);
-  
+async function sendDeepSeekPromptByEmail(promptText, dateStr) {
   try {
-    city._forecastDataDaily = null;
-    
-    const weather0 = await getDailySummary(city, startOffset);
-    const weather1 = await getDailySummary(city, startOffset + 1);
-    
-    console.log(`\n   🔍 ${city.displayName} 第1天: ${weather0 ? '✅ 有資料' : '❌ 無資料'}`);
-    if (weather0) {
-      if (weather0.isFallback) {
-        console.log(`      ⚠️  [備援] 溫度: ${weather0.temp}℃, 💧 濕度: ${weather0.humidity}% (14:00單點)`);
-      } else {
-        console.log(`      🌡️  平均溫度: ${weather0.temp}℃, 💧 平均濕度: ${weather0.humidity}%`);
-        console.log(`      📊  數據筆數: ${weather0.summary?.dataCount || 0} 筆，覆蓋 ${weather0.summary?.coveredHours || 0} 小時`);
+    // 建立郵件傳輸器
+    const transporter = nodemailer.createTransport({
+      service: EMAIL_CONFIG.service,
+      auth: {
+        user: EMAIL_CONFIG.auth.user,
+        pass: EMAIL_CONFIG.auth.pass
       }
-      console.log(`      📅  資料時間: ${weather0.dataTime}`);
-    }
-    console.log(`   🔍 ${city.displayName} 第2天: ${weather1 ? '✅ 有資料' : '❌ 無資料'}`);
-    if (weather1) {
-      if (weather1.isFallback) {
-        console.log(`      ⚠️  [備援] 溫度: ${weather1.temp}℃, 💧 濕度: ${weather1.humidity}% (14:00單點)`);
-      } else {
-        console.log(`      🌡️  平均溫度: ${weather1.temp}℃, 💧 平均濕度: ${weather1.humidity}%`);
-        console.log(`      📊  數據筆數: ${weather1.summary?.dataCount || 0} 筆，覆蓋 ${weather1.summary?.coveredHours || 0} 小時`);
-      }
-      console.log(`      📅  資料時間: ${weather1.dataTime}`);
-    }
-    
-    const day0 = weather0 ? calculateSHPI(weather0.temp, weather0.humidity, weather0.isFallback ? '[備援-14:00]' : '[新版全天]') : null;
-    const day1 = weather1 ? calculateSHPI(weather1.temp, weather1.humidity, weather1.isFallback ? '[備援-14:00]' : '[新版全天]') : null;
-    
-    if (day0 && weather0 && weather0.summary) {
-      day0._summary = weather0.summary;
-      day0._isFallback = weather0.isFallback || false;
-    }
-    if (day1 && weather1 && weather1.summary) {
-      day1._summary = weather1.summary;
-      day1._isFallback = weather1.isFallback || false;
-    }
-    
-    console.log(`\n   ✅ ${city.displayName} 兩天計算完成:`);
-    console.log(`      📅 第1天: ${day0 ? day0.light.emoji + ' ' + day0.light.name : '❓ 無資料'}${day0?._isFallback ? ' (備援)' : ''}`);
-    console.log(`      📅 第2天: ${day1 ? day1.light.emoji + ' ' + day1.light.name : '❓ 無資料'}${day1?._isFallback ? ' (備援)' : ''}`);
-    
-    let dataTime = weather0?.dataTime || weather1?.dataTime || null;
-    console.log(`${'='.repeat(60)}\n`);
-    
-    return {
-      city: city.displayName,
-      days: [day0, day1],
-      dataTime: dataTime,
-      rawData: [weather0, weather1]
-    };
-    
-  } catch (error) {
-    console.error(`\n❌❌❌ ${city.displayName} 計算過程中發生錯誤 ❌❌❌`);
-    console.error(`   錯誤訊息: ${error.message}`);
-    console.log(`${'='.repeat(60)}\n`);
-    
-    return {
-      city: city.displayName,
-      days: [null, null],
-      dataTime: null,
-      rawData: [null, null]
-    };
-  }
-}
+    });
 
-function getDateString(offset = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return `${date.getMonth()+1}/${date.getDate()}`;
+    // 郵件內容
+    const mailOptions = {
+      from: `"皮膚壓力指數 Bot" <${EMAIL_CONFIG.auth.user}>`,
+      to: EMAIL_CONFIG.to,
+      subject: `📊 DeepSeek 數據 Prompt - ${dateStr}`,
+      text: promptText,
+      html: `
+        <h2>📊 六都皮膚壓力指數數據</h2>
+        <p><strong>日期：</strong>${dateStr}</p>
+        <hr>
+        <pre style="font-size:14px; background:#f5f5f5; padding:15px; border-radius:5px;">${promptText}</pre>
+        <hr>
+        <p style="color:#999; font-size:12px;">此信件由皮膚壓力指數 Bot 自動發送，請勿回覆。</p>
+      `
+    };
+
+    // 發送郵件
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Email 已寄送: ${info.messageId}`);
+    return true;
+
+  } catch (error) {
+    console.error('❌ Email 寄送失敗:', error.message);
+    return false;
+  }
 }
 
 // ==========================================
@@ -905,13 +734,11 @@ function drawColoredCircle(image, x, y, color, radius = 24) {
 }
 
 // ==========================================
-// ✅ 生成圖片（支援傳入版本和模式）
+// ✅ 生成圖片
 // ==========================================
-async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr, version = 'line', mode = 'old') {
+async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr, version = 'line') {
   try {
-    console.log(`\n📊 開始生成圖片... (版本: ${version}, 模式: ${mode})`);
-    console.log(`📅 日期: ${day0Label} | ${day1Label}`);
-    console.log(`🕐 資料時間: ${dataTimeStr}`);
+    console.log(`\n📊 開始生成圖片... (版本: ${version})`);
     
     const templateFile = version === 'fb' 
       ? 'template_page1_fb.png' 
@@ -921,33 +748,27 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     
     const fontLarge = await Jimp.loadFont(Jimp.FONT_SANS_64_BLACK);
     const fontSmall = await Jimp.loadFont(Jimp.FONT_SANS_32_BLACK);
+    const fontDisclaimer = await Jimp.loadFont(Jimp.FONT_SANS_16_BLACK);
     
     let date1X, date1Y, date2X, date2Y;
     let light1X, light2X, lightYStart, lightYStep;
     let timeX, timeY;
+    let disX, disY;
     
     if (version === 'fb') {
-      date1X = 480;
-      date1Y = 160;
-      date2X = 770;
-      date2Y = 160;
-      light1X = 520;
-      light2X = 800;
-      lightYStart = 270;
-      lightYStep = 90;
-      timeX = 370;
-      timeY = 1450;
+      date1X = 480; date1Y = 160;
+      date2X = 770; date2Y = 160;
+      light1X = 520; light2X = 800;
+      lightYStart = 270; lightYStep = 90;
+      timeX = 370; timeY = 1450;
+      disX = 370; disY = 1530;
     } else {
-      date1X = 505;
-      date1Y = 170;
-      date2X = 805;
-      date2Y = 170;
-      light1X = 560;
-      light2X = 850;
-      lightYStart = 300;
-      lightYStep = 100;
-      timeX = 380;
-      timeY = 1560;
+      date1X = 505; date1Y = 170;
+      date2X = 805; date2Y = 170;
+      light1X = 560; light2X = 850;
+      lightYStart = 300; lightYStep = 100;
+      timeX = 380; timeY = 1560;
+      disX = 380; disY = 1640;
     }
     
     image.print(fontLarge, date1X, date1Y, day0Label);
@@ -971,14 +792,13 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
       
       await drawColoredCircle(image, light1X, c.l1y, color1, 24);
       await drawColoredCircle(image, light2X, c.l2y, color2, 24);
-      
-      const name1 = data.day0 && data.day0.light ? data.day0.light.name : '無資料';
-      const name2 = data.day1 && data.day1.light ? data.day1.light.name : '無資料';
-      console.log(`🔍 ${c.name}: 燈號寫入 -> ${name1}(${color1}) | ${name2}(${color2})`);
     }
     
-    const displayTime = dataTimeStr || '2026-07-25 14:00:00';
+    const displayTime = dataTimeStr || '2026-07-25 07:00-19:00 Daily Avg.';
     image.print(fontSmall, timeX, timeY, displayTime);
+    
+    const disclaimer = "📊 中央氣象署｜僅供生活保健參考，非醫療診斷依據";
+    image.print(fontDisclaimer, disX, disY, disclaimer);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
@@ -991,51 +811,80 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
 }
 
 // ==========================================
-// ✅ 產生圖片訊息（舊版 14:00）
+// ✅ 發布到 Facebook 限時動態
 // ==========================================
-async function generatePage1ImageFlexOld(version = 'line') {
+async function publishToFacebookStory(imageUrl) {
   try {
-    const cache = await getCachedForecastOld();
+    console.log(`📤 開始發布 Facebook 限時動態...`);
+    console.log(`🖼️  圖片網址: ${imageUrl}`);
     
-    if (cache && cache.page1) {
-      console.log(`📦 [舊版14:00] 使用快取圖片 (版本: ${version})`);
-      
-      if (version === 'fb') {
-        return {
-          type: 'image',
-          originalContentUrl: `${BASE_URL}/tmp/current_page1_fb.png`,
-          previewImageUrl: `${BASE_URL}/tmp/current_page1_fb.png`
-        };
-      } else {
-        return {
-          type: 'image',
-          originalContentUrl: `${BASE_URL}/tmp/current_page1.png`,
-          previewImageUrl: `${BASE_URL}/tmp/current_page1.png`
-        };
-      }
-    }
+    const uploadRes = await axios.post(
+      `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photos`,
+      { url: imageUrl, published: false },
+      { params: { access_token: FB_ACCESS_TOKEN }, timeout: 30000 }
+    );
     
-    console.log(`⚠️ [舊版14:00] 快取不存在，即時計算 (版本: ${version})`);
+    const photoId = uploadRes.data.id;
+    console.log(`✅ 圖片上傳成功，photo_id: ${photoId}`);
+    
+    const storyRes = await axios.post(
+      `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photo_stories`,
+      { photo_id: photoId, caption: '🌡️ 皮膚壓力指數 (全天綜合)' },
+      { params: { access_token: FB_ACCESS_TOKEN }, timeout: 30000 }
+    );
+    
+    console.log(`✅ Facebook 限時動態發布成功！`);
+    return storyRes.data;
+    
+  } catch (error) {
+    console.error('❌ Facebook 發布失敗:', error.response?.data?.error?.message || error.message);
+    return null;
+  }
+}
+
+// ==========================================
+// ✅ 核心發布流程（06:30 執行）
+// ==========================================
+async function runDailyPublish() {
+  // 防止重複執行
+  if (isPublishing) {
+    console.log('⚠️ 發布流程已在執行中，跳過');
+    return;
+  }
+  
+  isPublishing = true;
+  
+  try {
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`📅 開始每日發布流程 - ${getTaiwanTime().toLocaleString()}`);
+    console.log(`${'='.repeat(60)}`);
+    
     const startOffset = calculateStartOffset();
+    console.log(`📌 從 +${startOffset} 天開始抓取`);
     
+    // 1. 計算六都資料
+    const allData = await calculateAllCities(startOffset);
+    
+    // 2. 準備圖片數據
     const citiesData = [];
     let globalDataTime = null;
     
-    for (const city of CITIES) {
-      const twoDays = await calculateCityTwoDaysOld(city, startOffset, 14);
+    for (let i = 0; i < CITIES.length; i++) {
+      const city = CITIES[i];
+      const data = allData.results[i] || {};
       citiesData.push({
-        day0: twoDays.days[0],
-        day1: twoDays.days[1]
+        name: city.displayName,
+        day0: data.day0,
+        day1: data.day1
       });
-      if (!globalDataTime && twoDays.dataTime) {
-        globalDataTime = twoDays.dataTime;
+      if (!globalDataTime && data.day0Raw?.dataTime) {
+        globalDataTime = data.day0Raw.dataTime;
       }
     }
     
     if (!globalDataTime) {
       const now = new Date();
-      const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
-      globalDataTime = dateStr;
+      globalDataTime = now.toISOString().replace('T', ' ').slice(0, 19) + ' Daily Avg.';
     }
     
     const taiwanNow = getTaiwanTime();
@@ -1049,218 +898,72 @@ async function generatePage1ImageFlexOld(version = 'line') {
     const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
     const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
     
-    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, version, 'old');
-    if (!imageBuffer) {
-      return {
-        type: 'image',
-        originalContentUrl: `${BASE_URL}/images/template_page1.png`,
-        previewImageUrl: `${BASE_URL}/images/template_page1.png`
-      };
-    }
+    // 3. 生成 LINE 版圖片
+    console.log(`\n📸 生成 LINE 版圖片...`);
+    const imageBufferLine = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, 'line');
+    fs.writeFileSync(path.join('/tmp', 'current_page1.png'), imageBufferLine);
+    console.log(`✅ LINE 版圖片已儲存`);
     
-    const filename = version === 'fb' ? 'current_page1_fb.png' : 'current_page1.png';
-    const outputPath = path.join('/tmp', filename);
-    fs.writeFileSync(outputPath, imageBuffer);
-    console.log(`✅ [舊版14:00] 圖片已儲存到 /tmp/${filename}`);
+    // 4. 生成 FB 版圖片
+    console.log(`\n📸 生成 FB 版圖片...`);
+    const imageBufferFb = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, 'fb');
+    fs.writeFileSync(path.join('/tmp', 'current_page1_fb.png'), imageBufferFb);
+    console.log(`✅ FB 版圖片已儲存`);
     
-    return {
+    // 5. 更新快取
+    const page1 = {
       type: 'image',
-      originalContentUrl: `${BASE_URL}/tmp/${filename}`,
-      previewImageUrl: `${BASE_URL}/tmp/${filename}`
+      originalContentUrl: `${BASE_URL}/tmp/current_page1.png`,
+      previewImageUrl: `${BASE_URL}/tmp/current_page1.png`
     };
     
-  } catch (error) {
-    console.error('❌ [舊版14:00] 產生圖片訊息失敗:', error.message);
-    return {
+    const page2 = {
       type: 'image',
-      originalContentUrl: `${BASE_URL}/images/template_page1.png`,
-      previewImageUrl: `${BASE_URL}/images/template_page1.png`
+      originalContentUrl: `${BASE_URL}/images/template_page2.png`,
+      previewImageUrl: `${BASE_URL}/images/template_page2.png`
     };
-  }
-}
-
-// ==========================================
-// ✅ 產生圖片訊息（新版 全天綜合）
-// ==========================================
-async function generatePage1ImageFlexNew(version = 'line') {
-  try {
-    const cache = await getCachedForecastNew();
     
-    if (cache && cache.page1) {
-      console.log(`📦 [新版全天] 使用快取圖片 (版本: ${version})`);
+    cachedForecast = { page1, page2 };
+    lastCacheTime = new Date();
+    
+    const cacheData = {
+      page1, page2,
+      lastCacheTime: lastCacheTime.toISOString(),
+      startOffset
+    };
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
+    
+    // 6. 儲存 DeepSeek Prompt 並寄送 Email
+    if (allData.deepseekPrompt) {
+      fs.writeFileSync('./deepseek_prompt.txt', allData.deepseekPrompt);
+      console.log(`✅ DeepSeek Prompt 已儲存到 deepseek_prompt.txt`);
       
-      if (version === 'fb') {
-        return {
-          type: 'image',
-          originalContentUrl: `${BASE_URL}/tmp/current_page1_daily_fb.png`,
-          previewImageUrl: `${BASE_URL}/tmp/current_page1_daily_fb.png`
-        };
-      } else {
-        return {
-          type: 'image',
-          originalContentUrl: `${BASE_URL}/tmp/current_page1_daily.png`,
-          previewImageUrl: `${BASE_URL}/tmp/current_page1_daily.png`
-        };
+      // ✅ 寄送 Email
+      const today = getTaiwanDateString(startOffset);
+      await sendDeepSeekPromptByEmail(allData.deepseekPrompt, today);
+    }
+    
+    // 7. 發布 Facebook 限時動態（使用 FB 版圖片）
+    const fbImageUrl = `${BASE_URL}/tmp/current_page1_fb.png?t=${Date.now()}`;
+    await publishToFacebookStory(fbImageUrl);
+    
+    // 8. LINE 推播給訂閱者
+    console.log(`\n📤 推播給 ${subscribers.length} 位個人訂閱者`);
+    console.log(`📊 訊息佇列長度: ${messageQueue.length}`);
+    
+    if (cachedForecast && cachedForecast.page1) {
+      for (const userId of subscribers) {
+        await pushToUserQueued(userId, cachedForecast.page1);
       }
     }
     
-    console.log(`⚠️ [新版全天] 快取不存在，即時計算 (版本: ${version})`);
-    const startOffset = calculateStartOffset();
-    
-    const citiesData = [];
-    let globalDataTime = null;
-    
-    for (const city of CITIES) {
-      const twoDays = await calculateCityTwoDaysNew(city, startOffset);
-      citiesData.push({
-        day0: twoDays.days[0],
-        day1: twoDays.days[1]
-      });
-      if (!globalDataTime && twoDays.dataTime) {
-        globalDataTime = twoDays.dataTime;
-      }
-    }
-    
-    if (!globalDataTime) {
-      const now = new Date();
-      const dateStr = now.toISOString().replace('T', ' ').slice(0, 19);
-      globalDataTime = dateStr + ' Daily Avg.';
-    }
-    
-    const taiwanNow = getTaiwanTime();
-    const baseDate = new Date(taiwanNow);
-    baseDate.setDate(baseDate.getDate() + startOffset);
-    
-    const d0 = new Date(baseDate);
-    const d1 = new Date(baseDate);
-    d1.setDate(d1.getDate() + 1);
-    
-    const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
-    const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
-    
-    const imageBuffer = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, version, 'new');
-    if (!imageBuffer) {
-      return {
-        type: 'image',
-        originalContentUrl: `${BASE_URL}/images/template_page1.png`,
-        previewImageUrl: `${BASE_URL}/images/template_page1.png`
-      };
-    }
-    
-    const filename = version === 'fb' ? 'current_page1_daily_fb.png' : 'current_page1_daily.png';
-    const outputPath = path.join('/tmp', filename);
-    fs.writeFileSync(outputPath, imageBuffer);
-    console.log(`✅ [新版全天] 圖片已儲存到 /tmp/${filename}`);
-    
-    return {
-      type: 'image',
-      originalContentUrl: `${BASE_URL}/tmp/${filename}`,
-      previewImageUrl: `${BASE_URL}/tmp/${filename}`
-    };
+    console.log(`\n✅ 每日發布流程完成！`);
+    console.log(`${'='.repeat(60)}\n`);
     
   } catch (error) {
-    console.error('❌ [新版全天] 產生圖片訊息失敗:', error.message);
-    return {
-      type: 'image',
-      originalContentUrl: `${BASE_URL}/images/template_page1.png`,
-      previewImageUrl: `${BASE_URL}/images/template_page1.png`
-    };
-  }
-}
-
-// ==========================================
-// ✅ 發布到 Facebook 限時動態（舊版）
-// ==========================================
-async function publishToFacebookStoryOld() {
-  try {
-    const imageUrl = `${BASE_URL}/tmp/current_page1_fb.png?t=${Date.now()}`;
-    
-    console.log(`📤 [舊版14:00] 開始發布 Facebook 限時動態...`);
-    console.log(`🖼️  圖片網址: ${imageUrl}`);
-    
-    const uploadRes = await axios.post(
-      `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photos`,
-      {
-        url: imageUrl,
-        published: false
-      },
-      {
-        params: { access_token: FB_ACCESS_TOKEN },
-        timeout: 30000
-      }
-    );
-    
-    const photoId = uploadRes.data.id;
-    console.log(`✅ [舊版14:00] 圖片上傳成功，photo_id: ${photoId}`);
-    
-    const storyRes = await axios.post(
-      `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photo_stories`,
-      {
-        photo_id: photoId,
-        caption: '🌡️ 皮膚濕度壓力指數 (14:00)'
-      },
-      {
-        params: { access_token: FB_ACCESS_TOKEN },
-        timeout: 30000
-      }
-    );
-    
-    console.log(`✅ [舊版14:00] Facebook 限時動態發布成功！`);
-    console.log(`   post_id: ${storyRes.data.post_id}`);
-    
-    return storyRes.data;
-    
-  } catch (error) {
-    console.error('❌ [舊版14:00] Facebook 發布失敗:', error.response?.data?.error?.message || error.message);
-    return null;
-  }
-}
-
-// ==========================================
-// ✅ 發布到 Facebook 限時動態（新版）
-// ==========================================
-async function publishToFacebookStoryNew() {
-  try {
-    const imageUrl = `${BASE_URL}/tmp/current_page1_daily_fb.png?t=${Date.now()}`;
-    
-    console.log(`📤 [新版全天] 開始發布 Facebook 限時動態...`);
-    console.log(`🖼️  圖片網址: ${imageUrl}`);
-    
-    const uploadRes = await axios.post(
-      `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photos`,
-      {
-        url: imageUrl,
-        published: false
-      },
-      {
-        params: { access_token: FB_ACCESS_TOKEN },
-        timeout: 30000
-      }
-    );
-    
-    const photoId = uploadRes.data.id;
-    console.log(`✅ [新版全天] 圖片上傳成功，photo_id: ${photoId}`);
-    
-    const storyRes = await axios.post(
-      `https://graph.facebook.com/v21.0/${FB_PAGE_ID}/photo_stories`,
-      {
-        photo_id: photoId,
-        caption: '🌡️ 皮膚濕度壓力指數 (07:00-19:00 Daily Avg.)'
-      },
-      {
-        params: { access_token: FB_ACCESS_TOKEN },
-        timeout: 30000
-      }
-    );
-    
-    console.log(`✅ [新版全天] Facebook 限時動態發布成功！`);
-    console.log(`   post_id: ${storyRes.data.post_id}`);
-    
-    return storyRes.data;
-    
-  } catch (error) {
-    console.error('❌ [新版全天] Facebook 發布失敗:', error.response?.data?.error?.message || error.message);
-    return null;
+    console.error('❌ 每日發布流程失敗:', error);
+  } finally {
+    isPublishing = false;
   }
 }
 
@@ -1336,252 +1039,76 @@ async function replyTextMessage(replyToken, text) {
 }
 
 // ==========================================
+// ✅ 產生圖片訊息（統一使用快取）
+// ==========================================
+async function generatePage1ImageFlex(version = 'line') {
+  try {
+    const cache = await getCachedForecast();
+    
+    if (cache && cache.page1) {
+      console.log(`📦 使用快取圖片 (版本: ${version})`);
+      
+      const filename = version === 'fb' ? 'current_page1_fb.png' : 'current_page1.png';
+      return {
+        type: 'image',
+        originalContentUrl: `${BASE_URL}/tmp/${filename}`,
+        previewImageUrl: `${BASE_URL}/tmp/${filename}`
+      };
+    }
+    
+    console.log(`⚠️ 快取不存在，立即執行發布流程`);
+    await runDailyPublish();
+    
+    const filename = version === 'fb' ? 'current_page1_fb.png' : 'current_page1.png';
+    return {
+      type: 'image',
+      originalContentUrl: `${BASE_URL}/tmp/${filename}`,
+      previewImageUrl: `${BASE_URL}/tmp/${filename}`
+    };
+    
+  } catch (error) {
+    console.error('❌ 產生圖片訊息失敗:', error.message);
+    return {
+      type: 'image',
+      originalContentUrl: `${BASE_URL}/images/template_page1.png`,
+      previewImageUrl: `${BASE_URL}/images/template_page1.png`
+    };
+  }
+}
+
+// ==========================================
 // 快取管理函數
 // ==========================================
-
-// 舊版快取
-async function precomputeAndCacheOld() {
-  const startOffset = calculateStartOffset();
-  
-  console.log(`\n🔄 [舊版14:00] 開始預計算快取 - ${getTaiwanTime().toLocaleString()}`);
-  console.log(`📅 從 +${startOffset} 天開始抓取`);
-  const startTime = Date.now();
-  
-  try {
-    const citiesData = [];
-    let globalDataTime = null;
-    
-    for (const city of CITIES) {
-      const twoDays = await calculateCityTwoDaysOld(city, startOffset, 14);
-      citiesData.push({
-        name: city.displayName,
-        day0: twoDays.days[0],
-        day1: twoDays.days[1]
-      });
-      if (!globalDataTime && twoDays.dataTime) {
-        globalDataTime = twoDays.dataTime;
-      }
-    }
-    
-    const taiwanNow = getTaiwanTime();
-    const baseDate = new Date(taiwanNow);
-    baseDate.setDate(baseDate.getDate() + startOffset);
-    
-    const d0 = new Date(baseDate);
-    const d1 = new Date(baseDate);
-    d1.setDate(d1.getDate() + 1);
-    
-    const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
-    const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
-    
-    const imageBufferLine = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '', 'line', 'old');
-    const filenameLine = 'current_page1.png';
-    fs.writeFileSync(path.join('/tmp', filenameLine), imageBufferLine);
-    console.log(`✅ [舊版14:00] LINE 版圖片已儲存: ${filenameLine}`);
-    
-    const imageBufferFb = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '', 'fb', 'old');
-    const filenameFb = 'current_page1_fb.png';
-    fs.writeFileSync(path.join('/tmp', filenameFb), imageBufferFb);
-    console.log(`✅ [舊版14:00] FB 版圖片已儲存: ${filenameFb}`);
-    
-    const page1 = {
-      type: 'image',
-      originalContentUrl: `${BASE_URL}/tmp/${filenameLine}`,
-      previewImageUrl: `${BASE_URL}/tmp/${filenameLine}`
-    };
-    
-    const page2 = {
-      type: 'image',
-      originalContentUrl: `${BASE_URL}/images/template_page2.png`,
-      previewImageUrl: `${BASE_URL}/images/template_page2.png`
-    };
-    
-    cachedForecast = { page1, page2 };
-    lastCacheTime = new Date();
-    
-    const cacheData = {
-      page1: page1,
-      page2: page2,
-      lastCacheTime: lastCacheTime.toISOString(),
-      startOffset: startOffset
-    };
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
-    
-    await publishToFacebookStoryOld();
-    
-    const duration = Date.now() - startTime;
-    console.log(`✅ [舊版14:00] 快取預計算完成，耗時 ${duration}ms`);
-  } catch (error) {
-    console.error('❌ [舊版14:00] 預計算失敗:', error);
-    cachedForecast = null;
-  }
-}
-
-// 新版快取
-async function precomputeAndCacheNew() {
-  const startOffset = calculateStartOffset();
-  
-  console.log(`\n🔄 [新版全天] 開始預計算快取 - ${getTaiwanTime().toLocaleString()}`);
-  console.log(`📅 從 +${startOffset} 天開始抓取`);
-  const startTime = Date.now();
-  
-  try {
-    const citiesData = [];
-    let globalDataTime = null;
-    
-    for (const city of CITIES) {
-      const twoDays = await calculateCityTwoDaysNew(city, startOffset);
-      citiesData.push({
-        name: city.displayName,
-        day0: twoDays.days[0],
-        day1: twoDays.days[1]
-      });
-      if (!globalDataTime && twoDays.dataTime) {
-        globalDataTime = twoDays.dataTime;
-      }
-    }
-    
-    const taiwanNow = getTaiwanTime();
-    const baseDate = new Date(taiwanNow);
-    baseDate.setDate(baseDate.getDate() + startOffset);
-    
-    const d0 = new Date(baseDate);
-    const d1 = new Date(baseDate);
-    d1.setDate(d1.getDate() + 1);
-    
-    const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
-    const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
-    
-    const imageBufferLine = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '', 'line', 'new');
-    const filenameLine = 'current_page1_daily.png';
-    fs.writeFileSync(path.join('/tmp', filenameLine), imageBufferLine);
-    console.log(`✅ [新版全天] LINE 版圖片已儲存: ${filenameLine}`);
-    
-    const imageBufferFb = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime || '', 'fb', 'new');
-    const filenameFb = 'current_page1_daily_fb.png';
-    fs.writeFileSync(path.join('/tmp', filenameFb), imageBufferFb);
-    console.log(`✅ [新版全天] FB 版圖片已儲存: ${filenameFb}`);
-    
-    const page1 = {
-      type: 'image',
-      originalContentUrl: `${BASE_URL}/tmp/${filenameLine}`,
-      previewImageUrl: `${BASE_URL}/tmp/${filenameLine}`
-    };
-    
-    const page2 = {
-      type: 'image',
-      originalContentUrl: `${BASE_URL}/images/template_page2.png`,
-      previewImageUrl: `${BASE_URL}/images/template_page2.png`
-    };
-    
-    cachedForecastDaily = { page1, page2 };
-    lastCacheTimeDaily = new Date();
-    
-    const cacheData = {
-      page1: page1,
-      page2: page2,
-      lastCacheTime: lastCacheTimeDaily.toISOString(),
-      startOffset: startOffset
-    };
-    fs.writeFileSync(CACHE_FILE_DAILY, JSON.stringify(cacheData, null, 2));
-    
-    await publishToFacebookStoryNew();
-    
-    const duration = Date.now() - startTime;
-    console.log(`✅ [新版全天] 快取預計算完成，耗時 ${duration}ms`);
-  } catch (error) {
-    console.error('❌ [新版全天] 預計算失敗:', error);
-    cachedForecastDaily = null;
-  }
-}
-
-function loadCacheFromFileOld() {
+function loadCacheFromFile() {
   try {
     if (fs.existsSync(CACHE_FILE)) {
       const data = fs.readFileSync(CACHE_FILE, 'utf8');
       const cache = JSON.parse(data);
       cachedForecast = { page1: cache.page1, page2: cache.page2 };
       lastCacheTime = new Date(cache.lastCacheTime);
-      console.log(`📦 [舊版14:00] 從檔案載入快取成功，時間: ${lastCacheTime.toLocaleString()}`);
+      console.log(`📦 從檔案載入快取成功，時間: ${lastCacheTime.toLocaleString()}`);
       return true;
     }
   } catch (error) {
-    console.error('❌ [舊版14:00] 載入快取失敗:', error);
+    console.error('❌ 載入快取失敗:', error);
   }
   return false;
 }
 
-function loadCacheFromFileNew() {
-  try {
-    if (fs.existsSync(CACHE_FILE_DAILY)) {
-      const data = fs.readFileSync(CACHE_FILE_DAILY, 'utf8');
-      const cache = JSON.parse(data);
-      cachedForecastDaily = { page1: cache.page1, page2: cache.page2 };
-      lastCacheTimeDaily = new Date(cache.lastCacheTime);
-      console.log(`📦 [新版全天] 從檔案載入快取成功，時間: ${lastCacheTimeDaily.toLocaleString()}`);
-      return true;
-    }
-  } catch (error) {
-    console.error('❌ [新版全天] 載入快取失敗:', error);
-  }
-  return false;
-}
-
-async function getCachedForecastOld() {
+async function getCachedForecast() {
   if (!cachedForecast || !cachedForecast.page1) {
-    console.log('⚠️ [舊版14:00] 快取不存在，重新預計算');
-    await precomputeAndCacheOld();
+    console.log('⚠️ 快取不存在，執行發布流程');
+    await runDailyPublish();
     return cachedForecast;
   }
   
   if (lastCacheTime && (Date.now() - lastCacheTime.getTime() > 24 * 60 * 60 * 1000)) {
-    console.log('⚠️ [舊版14:00] 快取已超過 24 小時，重新預計算');
-    await precomputeAndCacheOld();
+    console.log('⚠️ 快取已超過 24 小時，執行發布流程');
+    await runDailyPublish();
     return cachedForecast;
   }
   
   return cachedForecast;
-}
-
-async function getCachedForecastNew() {
-  if (!cachedForecastDaily || !cachedForecastDaily.page1) {
-    console.log('⚠️ [新版全天] 快取不存在，重新預計算');
-    await precomputeAndCacheNew();
-    return cachedForecastDaily;
-  }
-  
-  if (lastCacheTimeDaily && (Date.now() - lastCacheTimeDaily.getTime() > 24 * 60 * 60 * 1000)) {
-    console.log('⚠️ [新版全天] 快取已超過 24 小時，重新預計算');
-    await precomputeAndCacheNew();
-    return cachedForecastDaily;
-  }
-  
-  return cachedForecastDaily;
-}
-
-// ==========================================
-// 每日發布任務（使用舊版 14:00）
-// ==========================================
-async function dailyPublishTask() {
-  console.log(`\n📅 ===== 每日發布任務 ${new Date().toLocaleString()} =====`);
-  
-  const cache = await getCachedForecastOld();
-  
-  if (cache && cache.page1) {
-    console.log(`📤 推播給 ${subscribers.length} 位個人訂閱者 (舊版14:00)`);
-    console.log(`📊 訊息佇列長度: ${messageQueue.length}`);
-    
-    for (const userId of subscribers) {
-      await pushToUserQueued(userId, cache.page1);
-    }
-  } else {
-    const errorMsg = getErrorFlexMessage();
-    for (const userId of subscribers) {
-      await pushToUserQueued(userId, errorMsg);
-    }
-  }
-  
-  console.log(`✅ 每日發布任務完成\n`);
 }
 
 // ==========================================
@@ -1589,9 +1116,9 @@ async function dailyPublishTask() {
 // ==========================================
 app.get('/api/all-cities-2days', async (req, res) => {
   try {
-    const cache = await getCachedForecastOld();
+    const cache = await getCachedForecast();
     if (cache && cache.page1) {
-      res.json({ success: true, message: '資料已快取 (舊版14:00)', lastUpdate: lastCacheTime?.toISOString() });
+      res.json({ success: true, message: '資料已快取', lastUpdate: lastCacheTime?.toISOString() });
     } else {
       res.json({ success: false, message: '暫無快取資料' });
     }
@@ -1605,8 +1132,7 @@ app.get('/', (req, res) => {
     status: 'ok', 
     subscribers: subscribers.length, 
     indoorTemp: INDOOR_TEMP, 
-    cacheTime: lastCacheTime?.toLocaleString(),
-    dailyCacheTime: lastCacheTimeDaily?.toLocaleString()
+    cacheTime: lastCacheTime?.toLocaleString()
   });
 });
 
@@ -1616,14 +1142,21 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/api/refresh-cache', async (req, res) => {
-  console.log('🔄 手動觸發兩種快取更新');
-  await precomputeAndCacheOld();
-  await precomputeAndCacheNew();
+  console.log('🔄 手動觸發發布流程');
+  await runDailyPublish();
   res.json({ 
     success: true, 
-    message: '兩種快取已更新', 
-    oldCacheTime: lastCacheTime?.toLocaleString(),
-    newCacheTime: lastCacheTimeDaily?.toLocaleString()
+    message: '發布流程已執行', 
+    cacheTime: lastCacheTime?.toLocaleString()
+  });
+});
+
+app.get('/api/push-test', async (req, res) => {
+  console.log('🔄 手動觸發推播測試');
+  await runDailyPublish();
+  res.json({ 
+    success: true, 
+    message: '推播測試已執行'
   });
 });
 
@@ -1653,15 +1186,13 @@ app.post('/webhook', async (req, res) => {
           saveGroups();
           console.log(`✅ Bot 加入新群組: ${groupId}`);
           await replyTextMessage(replyToken, 
-            `🌡️💧 皮膚濕度壓力指數 Bot 已加入！
+            `🌡️💧 皮膚壓力指數 Bot 已加入！
 
 📊 使用方式：
-• 「全台1」查詢六都 (14:00單點) LINE版
-• 「全台2」查詢六都 (14:00單點) FB版
-• 「全台3」查詢六都 (07-19全天) LINE版
-• 「全台4」查詢六都 (07-19全天) FB版
+• 輸入「全台」查詢六都 (LINE版)
+• 輸入「全台1」查詢六都 (FB版)
 
-💡 查詢結果會「直接」在群組中回覆`);
+💡 結果會「直接」在群組中回覆`);
         }
         continue;
       }
@@ -1672,7 +1203,7 @@ app.post('/webhook', async (req, res) => {
           saveSubscribers();
           console.log(`✅ 新用戶加入並自動訂閱: ${userId}`);
           
-          const cache = await getCachedForecastOld();
+          const cache = await getCachedForecast();
           if (cache && cache.page1) {
             await replyMessage(replyToken, cache.page1);
           } else {
@@ -1698,13 +1229,11 @@ app.post('/webhook', async (req, res) => {
         console.log(`📱 輸入: "${input}"`);
         
         if (isRateLimited()) {
-          console.log(`⚠️ 全域限流觸發，拒絕請求`);
           await replyTextMessage(replyToken, '⚠️ 系統忙碌中，請稍後再試。');
           continue;
         }
         
         if (isUserRateLimited(sourceId)) {
-          console.log(`⚠️ 使用者限流觸發: ${sourceId}`);
           await replyTextMessage(replyToken, '⚠️ 請稍後再查詢，30秒內只能查詢一次');
           continue;
         }
@@ -1732,10 +1261,23 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // ✅ 全台1：舊版 14:00 LINE
+        // ✅ 全台 → LINE 版
+        if (input === '全台' || input === 'ALL') {
+          console.log(`📱 用戶請求全台 (LINE版)`);
+          const imageMsg = await generatePage1ImageFlex('line');
+          if (imageMsg) {
+            await replyMessage(replyToken, imageMsg);
+          } else {
+            const errorMsg = getErrorFlexMessage();
+            await replyMessage(replyToken, errorMsg);
+          }
+          continue;
+        }
+        
+        // ✅ 全台1 → FB 版
         if (input === '全台1' || input === 'ALL1') {
-          console.log(`📱 [舊版14:00] 用戶請求全台1 (LINE)`);
-          const imageMsg = await generatePage1ImageFlexOld('line');
+          console.log(`📱 用戶請求全台1 (FB版)`);
+          const imageMsg = await generatePage1ImageFlex('fb');
           if (imageMsg) {
             await replyMessage(replyToken, imageMsg);
           } else {
@@ -1745,36 +1287,12 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // ✅ 全台2：舊版 14:00 FB
-        if (input === '全台2' || input === 'ALL2') {
-          console.log(`📱 [舊版14:00] 用戶請求全台2 (FB)`);
-          const imageMsg = await generatePage1ImageFlexOld('fb');
-          if (imageMsg) {
-            await replyMessage(replyToken, imageMsg);
-          } else {
-            const errorMsg = getErrorFlexMessage();
-            await replyMessage(replyToken, errorMsg);
-          }
-          continue;
-        }
-        
-        // ✅ 全台3：新版 全天綜合 LINE
-        if (input === '全台3' || input === 'ALL3') {
-          console.log(`📱 [新版全天] 用戶請求全台3 (LINE)`);
-          const imageMsg = await generatePage1ImageFlexNew('line');
-          if (imageMsg) {
-            await replyMessage(replyToken, imageMsg);
-          } else {
-            const errorMsg = getErrorFlexMessage();
-            await replyMessage(replyToken, errorMsg);
-          }
-          continue;
-        }
-        
-        // ✅ 全台4：新版 全天綜合 FB
-        if (input === '全台4' || input === 'ALL4') {
-          console.log(`📱 [新版全天] 用戶請求全台4 (FB)`);
-          const imageMsg = await generatePage1ImageFlexNew('fb');
+        // ✅ 相容舊版指令（全部指向新版）
+        if (input === '全台2' || input === 'ALL2' || input === '全台3' || input === 'ALL3' || 
+            input === '全台4' || input === 'ALL4') {
+          const version = (input === '全台2' || input === 'ALL2' || input === '全台4' || input === 'ALL4') ? 'fb' : 'line';
+          console.log(`📱 用戶請求 ${input} (相容模式，版本: ${version})`);
+          const imageMsg = await generatePage1ImageFlex(version);
           if (imageMsg) {
             await replyMessage(replyToken, imageMsg);
           } else {
@@ -1786,16 +1304,11 @@ app.post('/webhook', async (req, res) => {
         
         if (sourceType === 'group') {
           await replyTextMessage(replyToken, 
-            `📊 查詢六都皮膚濕度壓力指數\n\n` +
-            `請輸入以下指令：\n` +
-            `「全台1」14:00單點 (LINE版)\n` +
-            `「全台2」14:00單點 (FB版)\n` +
-            `「全台3」07-19全天 (LINE版)\n` +
-            `「全台4」07-19全天 (FB版)`);
+            `📊 查詢六都皮膚壓力指數\n\n請輸入「全台」(LINE版) 或「全台1」(FB版)`);
           continue;
         }
         
-        const cache = await getCachedForecastOld();
+        const cache = await getCachedForecast();
         if (cache && cache.page1) {
           await replyMessage(replyToken, cache.page1);
         } else {
@@ -1810,95 +1323,41 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ==========================================
-// 每日推播檢查機制（每分鐘檢查）
+// ⭐ 定時任務
 // ==========================================
-let lastPublishDate = null;
 
-function checkAndPublish() {
-  const taiwanTime = getTaiwanTime();
-  const hours = taiwanTime.getUTCHours();
-  const minutes = taiwanTime.getUTCMinutes();
-  
-  if (hours === 7 && minutes === 0) {
-    const today = taiwanTime.toISOString().split('T')[0];
-    if (lastPublishDate !== today) {
-      console.log(`📅 觸發每日推播 - ${today} 台灣時間 ${hours}:${minutes}`);
-      lastPublishDate = today;
-      dailyPublishTask();
-    }
-  }
-}
-
-setInterval(() => {
-  checkAndPublish();
-}, 60 * 1000);
-
-console.log('🕐 每日推播檢查機制已啟動（每分鐘檢查，每日 7:00 觸發）');
-
-// ==========================================
-// ⭐ 定時預計算任務（06:30）
-// ==========================================
+// 每日 06:30 執行發布流程
 cron.schedule('30 6 * * *', () => {
-  console.log(`\n⏰ [06:30] 預計算 - 同時更新舊版(14:00)與新版(全天)快取`);
-  console.log(`📌 舊版: 抓取當天 14:00 單點數據`);
-  console.log(`📌 新版: 抓取當天 07:00-19:00 全天綜合指標 (需 ≥10筆且覆蓋≥10小時)`);
-  precomputeAndCacheOld();
-  // precomputeAndCacheNew();
+  console.log(`\n⏰ [06:30] 觸發每日發布流程`);
+  runDailyPublish();
 }, {
   timezone: "Asia/Taipei"
 });
 
-console.log('📅 已設定定時預計算任務：每天 06:30 (台灣時間)');
-console.log('📌 06:30 同時更新兩種版本快取，確保 7:00 推播使用最新資料');
+console.log('📅 已設定定時任務：每天 06:30 (台灣時間) 執行發布流程');
 
-// ==========================================
-// ⭐ 定時 ping 防止 Render 休眠
-// ==========================================
+// 定時 ping 防止 Render 休眠
 const RENDER_URL = process.env.RENDER_URL || BASE_URL;
-
 setInterval(() => {
   axios.get(`${RENDER_URL}/health`).catch(() => {});
   console.log(`💓 Ping 健康檢查 - ${new Date().toLocaleString()}`);
 }, 10 * 60 * 1000);
-
 console.log('💓 已設定定時 ping（每 10 分鐘）防止 Render 休眠');
 
 // ==========================================
 // 啟動伺服器
 // ==========================================
-function calculateStartOffset() {
-  const hours = getTaiwanHour();
-  const minutes = getTaiwanMinute();
-  const currentTime = hours + minutes / 60;
-  
-  if (currentTime >= 18.0) {
-    console.log(`⏰ 台灣時間 ${hours}:${minutes}，已過 18:00，從 +1 天（明天）開始抓取預報`);
-    return 1;
-  } else {
-    console.log(`⏰ 台灣時間 ${hours}:${minutes}，尚未過 18:00，從 +0 天（今天）開始抓取`);
-    return 0;
-  }
-}
-
 (async () => {
   await loadFromGitHub();
-  loadCacheFromFileOld();
-  loadCacheFromFileNew();
+  loadCacheFromFile();
   
+  // 啟動時檢查是否需要執行發布
   if (!cachedForecast) {
-    console.log('🚀 啟動時無舊版快取，立即執行預計算');
-    await precomputeAndCacheOld();
+    console.log('🚀 啟動時無快取，立即執行發布流程');
+    await runDailyPublish();
   } else if (lastCacheTime && (Date.now() - lastCacheTime.getTime() > 24 * 60 * 60 * 1000)) {
-    console.log('⚠️ 舊版快取已超過 24 小時，重新預計算');
-    await precomputeAndCacheOld();
-  }
-  
-  if (!cachedForecastDaily) {
-    console.log('🚀 啟動時無新版快取，立即執行預計算');
-    await precomputeAndCacheNew();
-  } else if (lastCacheTimeDaily && (Date.now() - lastCacheTimeDaily.getTime() > 24 * 60 * 60 * 1000)) {
-    console.log('⚠️ 新版快取已超過 24 小時，重新預計算');
-    await precomputeAndCacheNew();
+    console.log('⚠️ 快取已超過 24 小時，執行發布流程');
+    await runDailyPublish();
   }
   
   const PORT = process.env.PORT || 10000;
@@ -1906,26 +1365,15 @@ function calculateStartOffset() {
     console.log(`\n🚀 ========================================`);
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🏠 室內基準：${INDOOR_TEMP}℃`);
-    console.log(`\n📌 ===== 兩種版本並行 =====`);
-    console.log(`📡 [舊版14:00] API：F-D0047-089 (單點 14:00)`);
-    console.log(`   📱 全台1 → LINE 版圖片`);
-    console.log(`   📱 全台2 → FB 版圖片`);
-    console.log(`📡 [新版全天] API：F-D0047-089 (07:00-19:00 全天綜合)`);
-    console.log(`   📱 全台3 → LINE 版圖片`);
-    console.log(`   📱 全台4 → FB 版圖片`);
-    console.log(`   🔒 門檻：≥10筆數據 且 覆蓋≥10小時 (08:00-18:00)`);
-    console.log(`   🔄 不足時自動降級使用 14:00 單點`);
-    console.log(`   📌 取樣策略：07:00固定, 08-18前後抓避重複, 19:00固定`);
-    console.log(`\n⏰ 預計算時間：每天 06:30 (台灣時間) - 兩種版本同時更新`);
-    console.log(`🕐 每日推播：每天 07:00 (台灣時間) - 使用舊版14:00`);
-    console.log(`📌 系統會根據台灣時間自動決定從 +0 或 +1 天開始抓取`);
-    console.log(`📦 舊版快取狀態：${cachedForecast ? '已載入' : '無'}`);
-    console.log(`📦 新版快取狀態：${cachedForecastDaily ? '已載入' : '無'}`);
+    console.log(`📡 使用全天綜合指標 (07:00-19:00)`);
+    console.log(`📌 取樣策略：07:00固定, 08-18前後抓避重複, 19:00固定`);
+    console.log(`🔒 門檻：≥10筆數據 且 覆蓋≥10小時 (08:00-18:00)`);
+    console.log(`⏰ 發布時間：每天 06:30 (台灣時間)`);
+    console.log(`📱 LINE 指令：全台 → LINE版 | 全台1 → FB版`);
+    console.log(`📦 快取狀態：${cachedForecast ? '已載入' : '無'}`);
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
     console.log(`👥 群組數量：${groups.length} 個`);
-    console.log(`📊 訊息佇列延遲：${messageQueue.delay}ms`);
-    console.log(`🛡️  限流：每分鐘 ${rateLimit.maxRequests} 次請求，每人 30 秒冷卻`);
-    console.log(`💓 定時 ping：每 10 分鐘防止休眠`);
+    console.log(`📧 Email 寄送：已啟用 (每日 06:30 寄送 DeepSeek Prompt)`);
     console.log(`========================================\n`);
   });
 })();
