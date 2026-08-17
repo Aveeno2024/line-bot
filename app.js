@@ -644,18 +644,16 @@ async function calculateAllCities(startOffset = 0) {
 // ==========================================
 async function sendDeepSeekPromptByEmail(promptText, dateStr) {
   try {
-    // 建立郵件傳輸器
-   const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: EMAIL_CONFIG.auth.user,
-    pass: EMAIL_CONFIG.auth.pass,
-  },
-});
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: EMAIL_CONFIG.auth.user,
+        pass: EMAIL_CONFIG.auth.pass
+      }
+    });
 
-    // 郵件內容
     const mailOptions = {
       from: `"皮膚壓力指數 Bot" <${EMAIL_CONFIG.auth.user}>`,
       to: EMAIL_CONFIG.to,
@@ -671,7 +669,6 @@ async function sendDeepSeekPromptByEmail(promptText, dateStr) {
       `
     };
 
-    // 發送郵件
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ Email 已寄送: ${info.messageId}`);
     return true;
@@ -747,16 +744,16 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     let disX, disY;
     
     if (version === 'fb') {
-      date1X = 480; date1Y = 170;
-      date2X = 770; date2Y = 170;
-      light1X = 550; light2X = 865;
-      lightYStart = 290; lightYStep = 97;
+      date1X = 480; date1Y = 160;
+      date2X = 770; date2Y = 160;
+      light1X = 520; light2X = 800;
+      lightYStart = 270; lightYStep = 90;
       timeX = 370; timeY = 1450;
       disX = 370; disY = 1530;
     } else {
       date1X = 505; date1Y = 170;
       date2X = 805; date2Y = 170;
-      light1X = 560; light2X = 890;
+      light1X = 560; light2X = 850;
       lightYStart = 300; lightYStep = 100;
       timeX = 380; timeY = 1560;
       disX = 380; disY = 1640;
@@ -788,8 +785,8 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     const displayTime = dataTimeStr || '2026-07-25 07:00-19:00 Daily Avg.';
     image.print(fontSmall, timeX, timeY, displayTime);
     
-    // const disclaimer = "📊 中央氣象署｜僅供生活保健參考，非醫療診斷依據";
-    // image.print(fontDisclaimer, disX, disY, disclaimer);
+    const disclaimer = "📊 中央氣象署｜僅供生活保健參考，非醫療診斷依據";
+    image.print(fontDisclaimer, disX, disY, disclaimer);
     
     const buffer = await image.getBufferAsync(Jimp.MIME_PNG);
     console.log(`✅ 圖片生成完成 (大小: ${Math.round(buffer.length / 1024)} KB)`);
@@ -837,7 +834,6 @@ async function publishToFacebookStory(imageUrl) {
 // ✅ 核心發布流程（06:30 執行）
 // ==========================================
 async function runDailyPublish() {
-  // 防止重複執行
   if (isPublishing) {
     console.log('⚠️ 發布流程已在執行中，跳過');
     return;
@@ -853,10 +849,8 @@ async function runDailyPublish() {
     const startOffset = calculateStartOffset();
     console.log(`📌 從 +${startOffset} 天開始抓取`);
     
-    // 1. 計算六都資料
     const allData = await calculateAllCities(startOffset);
     
-    // 2. 準備圖片數據
     const citiesData = [];
     let globalDataTime = null;
     
@@ -889,19 +883,16 @@ async function runDailyPublish() {
     const day0Label = `${d0.getMonth()+1}/${d0.getDate()}`;
     const day1Label = `${d1.getMonth()+1}/${d1.getDate()}`;
     
-    // 3. 生成 LINE 版圖片
     console.log(`\n📸 生成 LINE 版圖片...`);
     const imageBufferLine = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, 'line');
     fs.writeFileSync(path.join('/tmp', 'current_page1.png'), imageBufferLine);
     console.log(`✅ LINE 版圖片已儲存`);
     
-    // 4. 生成 FB 版圖片
     console.log(`\n📸 生成 FB 版圖片...`);
     const imageBufferFb = await generatePage1Image(day0Label, day1Label, citiesData, globalDataTime, 'fb');
     fs.writeFileSync(path.join('/tmp', 'current_page1_fb.png'), imageBufferFb);
     console.log(`✅ FB 版圖片已儲存`);
     
-    // 5. 更新快取
     const page1 = {
       type: 'image',
       originalContentUrl: `${BASE_URL}/tmp/current_page1.png`,
@@ -924,21 +915,17 @@ async function runDailyPublish() {
     };
     fs.writeFileSync(CACHE_FILE, JSON.stringify(cacheData, null, 2));
     
-    // 6. 儲存 DeepSeek Prompt 並寄送 Email
     if (allData.deepseekPrompt) {
       fs.writeFileSync('./deepseek_prompt.txt', allData.deepseekPrompt);
       console.log(`✅ DeepSeek Prompt 已儲存到 deepseek_prompt.txt`);
       
-      // ✅ 寄送 Email
       const today = getTaiwanDateString(startOffset);
       await sendDeepSeekPromptByEmail(allData.deepseekPrompt, today);
     }
     
-    // 7. 發布 Facebook 限時動態（使用 FB 版圖片）
     const fbImageUrl = `${BASE_URL}/tmp/current_page1_fb.png?t=${Date.now()}`;
     await publishToFacebookStory(fbImageUrl);
     
-    // 8. LINE 推播給訂閱者
     console.log(`\n📤 推播給 ${subscribers.length} 位個人訂閱者`);
     console.log(`📊 訊息佇列長度: ${messageQueue.length}`);
     
@@ -1103,7 +1090,7 @@ async function getCachedForecast() {
 }
 
 // ==========================================
-// 網站 API
+// ✅ 網站 API
 // ==========================================
 app.get('/api/all-cities-2days', async (req, res) => {
   try {
@@ -1149,6 +1136,23 @@ app.get('/api/push-test', async (req, res) => {
     success: true, 
     message: '推播測試已執行'
   });
+});
+
+// ==========================================
+// ✅ 新增：提供 deepseek_prompt.txt 的下載路由
+// ==========================================
+app.get('/download-deepseek-prompt', (req, res) => {
+  const filePath = path.join(__dirname, 'deepseek_prompt.txt');
+  if (fs.existsSync(filePath)) {
+    res.download(filePath, 'deepseek_prompt.txt', (err) => {
+      if (err) {
+        console.error('下載失敗:', err);
+        res.status(500).send('無法下載檔案');
+      }
+    });
+  } else {
+    res.status(404).send('檔案尚未生成，請稍後再試');
+  }
 });
 
 // ==========================================
@@ -1278,7 +1282,7 @@ app.post('/webhook', async (req, res) => {
           continue;
         }
         
-        // ✅ 相容舊版指令（全部指向新版）
+        // ✅ 相容舊版指令
         if (input === '全台2' || input === 'ALL2' || input === '全台3' || input === 'ALL3' || 
             input === '全台4' || input === 'ALL4') {
           const version = (input === '全台2' || input === 'ALL2' || input === '全台4' || input === 'ALL4') ? 'fb' : 'line';
@@ -1342,7 +1346,6 @@ console.log('💓 已設定定時 ping（每 10 分鐘）防止 Render 休眠');
   await loadFromGitHub();
   loadCacheFromFile();
   
-  // 啟動時檢查是否需要執行發布
   if (!cachedForecast) {
     console.log('🚀 啟動時無快取，立即執行發布流程');
     await runDailyPublish();
@@ -1365,6 +1368,7 @@ console.log('💓 已設定定時 ping（每 10 分鐘）防止 Render 休眠');
     console.log(`📋 個人訂閱：${subscribers.length} 人`);
     console.log(`👥 群組數量：${groups.length} 個`);
     console.log(`📧 Email 寄送：已啟用 (每日 06:30 寄送 DeepSeek Prompt)`);
+    console.log(`📥 下載連結：/download-deepseek-prompt`);
     console.log(`========================================\n`);
   });
 })();
