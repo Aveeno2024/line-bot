@@ -645,13 +645,15 @@ async function calculateAllCities(startOffset = 0) {
 async function sendDeepSeekPromptByEmail(promptText, dateStr) {
   try {
     // 建立郵件傳輸器
-    const transporter = nodemailer.createTransport({
-      service: EMAIL_CONFIG.service,
-      auth: {
-        user: EMAIL_CONFIG.auth.user,
-        pass: EMAIL_CONFIG.auth.pass
-      }
-    });
+   const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
+  auth: {
+    user: EMAIL_CONFIG.auth.user,
+    pass: EMAIL_CONFIG.auth.pass,
+  },
+});
 
     // 郵件內容
     const mailOptions = {
@@ -747,14 +749,14 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
     if (version === 'fb') {
       date1X = 480; date1Y = 170;
       date2X = 770; date2Y = 170;
-      light1X = 550; light2X = 860;
-      lightYStart = 290; lightYStep = 94;
-      timeX = 370; timeY = 1650;
+      light1X = 550; light2X = 865;
+      lightYStart = 290; lightYStep = 97;
+      timeX = 370; timeY = 1450;
       disX = 370; disY = 1530;
     } else {
       date1X = 505; date1Y = 170;
       date2X = 805; date2Y = 170;
-      light1X = 560; light2X = 900;
+      light1X = 560; light2X = 890;
       lightYStart = 300; lightYStep = 100;
       timeX = 380; timeY = 1560;
       disX = 380; disY = 1640;
