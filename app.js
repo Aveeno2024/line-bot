@@ -13,9 +13,9 @@ app.use(express.json());
 // ==========================================
 
 const CHANNEL_ACCESS_TOKEN = 'KTrkQhxdh/NX6MzhtqDu2IA69XqdelCzNT3bYiXTX7ui5c58yplYfW6SsjXlUQtSkcLFdA8uI5pjbAZ75WX/xIcmlNcjUEztbyBvT0f8Z9zKcdsvlL2XHTEDXUR+5Js6c1tXG0DYFrrTjRgNTgJviQdB04t89/1O/w1cDnyilFU=';
-const CWA_API_KEY = 'CWA-API-Key';
-const FB_ACCESS_TOKEN = 'FB-token';
-const FB_PAGE_ID = 'FB-ID';
+const CWA_API_KEY = 'CWA-685A3A03-CD65-4BFF-B31B-84CF07793954';
+const FB_ACCESS_TOKEN = 'EAGaD7FThBa0BSKOOXZAloexV9I3lZBOwtCjiSX7Hfa8sHPnBRyR6GHuJ3wSXWzpal3wZB1F9hqwLGqc4jRMZA50iVlfkcBudKYVKeZBJVZC05j4F2HVgcCvZC3ZBw75poFOxQwuj5tuuOKQiN4tUxLCVPFgr3fpi7UGIgrMeO71yAVZCwynBcvJkDKTV3SaazqmjvQ5ZAHCwZBgrCBO6Au9R0JSZBWOS';
+const FB_PAGE_ID = '1260518434131656';
 const BASE_URL = 'https://line-bot-v9q8.onrender.com';
 
 // ==========================================
@@ -691,8 +691,8 @@ async function generatePage1Image(day0Label, day1Label, citiesData, dataTimeStr,
       date1X = 490; date1Y = 165;
       date2X = 790; date2Y = 165;
       light1X = 560; light2X = 865;
-      lightYStart = 280; lightYStep = 97;
-      timeX = 370; timeY = 1560;
+      lightYStart = 285; lightYStep = 100;
+      timeX = 370; timeY = 1620;
       disX = 370; disY = 1530;
     } else {
       date1X = 505; date1Y = 170;
